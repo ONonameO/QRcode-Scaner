@@ -6,7 +6,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
       width: 320px; 
-      padding: 0; 
+      padding: 16px; 
       margin: 0; 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #fff;
@@ -15,22 +15,17 @@
     .view.active { display: block; }
     
     h3 { 
-      margin: 0; 
-      padding: 16px;
+      margin: 0 0 16px; 
       font-size: 16px; 
       color: #333;
       font-weight: 600;
-      border-bottom: 1px solid #f0f0f0;
     }
     
     /* 操作视图 */
-    #view-action {
-      padding: 16px;
-    }
     #btn-area {
       width: 100%; 
       padding: 12px; 
-      margin-top: 12px;
+      margin: 8px 0;
       border: 1px solid #e0e0e0; 
       border-radius: 8px; 
       cursor: pointer;
@@ -52,32 +47,30 @@
       color: #888; 
       margin-top: 12px; 
       line-height: 1.5; 
-      padding: 8px 12px;
+      padding: 8px;
       background: #fafafa;
       border-radius: 6px;
     }
     
     /* 结果视图 */
-    #view-result {
-      padding: 16px;
-    }
     .result-header {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f0f0f0;
     }
     .result-icon {
-      width: 28px; 
-      height: 28px; 
-      border-radius: 50%; 
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      font-size: 16px; 
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
       color: white;
       background: #07c160;
-      flex-shrink: 0;
     }
     .result-icon.error {
       background: #ff4d4f;
@@ -87,7 +80,6 @@
       font-weight: 600;
       color: #333;
     }
-    
     .result-content {
       background: #f6f6f6;
       border-radius: 8px;
@@ -96,22 +88,22 @@
       color: #333;
       font-size: 13px;
       line-height: 1.6;
-      max-height: 180px;
+      max-height: 200px;
       overflow-y: auto;
       border: 1px solid #e8e8e8;
+      margin-bottom: 12px;
     }
     .btn-group {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-top: 12px;
     }
     .btn-row {
       display: flex;
       gap: 8px;
     }
     button {
-      padding: 10px 0; 
+      padding: 10px 0;
       border: none;
       border-radius: 6px;
       font-size: 13px;
@@ -127,7 +119,6 @@
     }
     .btn-secondary {
       background: #f0f0f0;
- 
       color: #666;
       flex: 1;
     }
@@ -139,13 +130,10 @@
       align-items: center;
       justify-content: center;
       gap: 4px;
-      text-decoration: none;
     }
-    .hidden { display: none !important; }
-    
     .toast {
       position: fixed;
-      bottom: 12px;
+      bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
       background: #333;
@@ -157,7 +145,6 @@
       transition: opacity 0.3s;
       pointer-events: none;
       white-space: nowrap;
-      z-index: 10000;
     }
     .toast.show { opacity: 1; }
   </style>
@@ -170,7 +157,7 @@
       <span>⬚</span>
       <span>框选区域识别</span>
     </button>
-    <div class="tip">在页面拖拽鼠标框选二维码区域<br>按 ESC 取消</div>
+    <div class="tip">在页面拖拽鼠标框选二维码区域，按 ESC 取消</div>
   </div>
 
   <!-- 结果视图 -->
@@ -181,13 +168,10 @@
     </div>
     <div class="result-content" id="result-content"></div>
     <div class="btn-group">
-      <a class="btn-link hidden" id="btn-open" target="_blank">
-        <span>🔗</span>
-        <span>打开链接</span>
-      </a>
+      <button class="btn-link" id="btn-open" style="display:none;">🔗 打开链接</button>
       <div class="btn-row">
         <button class="btn-primary" id="btn-copy">📋 复制结果</button>
-        <button class="btn-secondary" id="btn-back">↩ 返回</button>
+        <button class="btn-secondary" id="btn-back">返回</button>
       </div>
     </div>
   </div>

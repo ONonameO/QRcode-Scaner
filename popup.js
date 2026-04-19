@@ -16,17 +16,59 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let currentAbortController = null;
   let isDecoding = false;
+  let currentDecodePromise = null;
 
-  // 检查是否有待显示的结果（5分钟内有效）
-  const { lastResult } = await chrome.storage.local.get('lastResult');
+  // 检查是否有正在进行的识别任务
+  const { isDecoding: globalIsDecoding, decodeStartTime } = await chrome.storage.local.get(['isDecoding', 'decodeStartTime']);
   
-  if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
-    showResult(lastResult);
+  // 如果5分钟内有正在进行的识别，显示加载状态
+  if (globalIsDecoding && decodeStartTime && (Date.now() - decodeStartTime < 300000)) {
+    showLoading('正在识别中...');
+    // 轮询检查结果
+    pollForResult();
   } else {
-    showAction();
-    if (lastResult) {
-      chrome.storage.local.remove('lastResult');
+    // 检查是否有待显示的结果（5分钟内有效）
+    const { lastResult } = await chrome.storage.local.get('lastResult');
+    
+    if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
+      showResult(lastResult);
+    } else {
+      showAction();
+      if (lastResult) {
+        chrome.storage.local.remove('lastResult');
+      }
     }
+    // 清理过期的识别状态
+    if (globalIsDecoding) {
+      chrome.storage.local.remove(['isDecoding', 'decodeStartTime']);
+    }
+  }
+
+  // 轮询结果
+  async function pollForResult() {
+    let attempts = 0;
+    const maxAttempts = 60; // 最多轮询60次（30秒）
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      const { lastResult, isDecoding: stillDecoding } = await chrome.storage.local.get(['lastResult', 'isDecoding']);
+      
+      if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
+        // 找到结果
+        clearInterval(interval);
+        chrome.storage.local.remove(['isDecoding', 'decodeStartTime']);
+        showResult(lastResult);
+      } else if (!stillDecoding || attempts >= maxAttempts) {
+        // 识别完成或超时
+        clearInterval(interval);
+        chrome.storage.local.remove(['isDecoding', 'decodeStartTime']);
+        if (attempts >= maxAttempts) {
+          showResult({ text: '识别超时，请重试', isError: true });
+        } else {
+          showAction();
+        }
+      }
+    }, 500);
   }
 
   // 框选区域
@@ -63,6 +105,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const file = e.target.files[0];
     if (!file) return;
     
+    // 检查文件类型
+    if (!file.type.startsWith('image/')) {
+      showToast('请选择图片文件');
+      fileInput.value = '';
+      return;
+    }
+    
     // 取消之前的识别
     cancelCurrentDecode();
     
@@ -72,7 +121,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const dataUrl = await fileToDataURL(file);
       const result = await decodeWithBackground(dataUrl);
       if (!isDecoding) {
-        // 如果已经被取消，不处理结果
         return;
       }
       handleDecodeResult(result);
@@ -86,57 +134,104 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   
-  // 读取剪贴板图片
+  // 读取剪贴板图片 - 修复版
   btnClipboard.addEventListener('click', async () => {
     try {
       // 取消之前的识别
       cancelCurrentDecode();
       
-      // 检查剪贴板权限
-      const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' });
+      showLoading('正在读取剪贴板...');
       
-      if (permissionStatus.state === 'denied') {
-        showToast('没有剪贴板读取权限');
+      // 检查剪贴板权限
+      let hasPermission = false;
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' });
+        hasPermission = permissionStatus.state === 'granted';
+      } catch (err) {
+        console.log('权限查询失败，将直接尝试读取');
+      }
+      
+      let clipboardItems;
+      try {
+        clipboardItems = await navigator.clipboard.read();
+      } catch (err) {
+        if (err.name === 'NotAllowedError') {
+          showToast('需要剪贴板权限，请在浏览器设置中允许');
+        } else if (err.name === 'ReadError') {
+          showToast('剪贴板内容无法读取，请确保是图片格式');
+        } else {
+          showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
+        }
+        showAction();
         return;
       }
       
-      showLoading('正在读取剪贴板...');
-      const clipboardItems = await navigator.clipboard.read();
+      if (!clipboardItems || clipboardItems.length === 0) {
+        showToast('剪贴板为空');
+        showAction();
+        return;
+      }
       
       let imageFound = false;
+      let validImage = null;
+      
+      // 遍历剪贴板项，查找图片
       for (const item of clipboardItems) {
         const imageTypes = item.types.filter(type => type.startsWith('image/'));
         
+        if (imageTypes.length === 0) {
+          continue;
+        }
+        
         for (const type of imageTypes) {
-          const blob = await item.getType(type);
-          if (blob && blob.type.startsWith('image/')) {
-            const dataUrl = await blobToDataURL(blob);
-            showLoading('正在解析图片...');
-            const result = await decodeWithBackground(dataUrl);
-            if (!isDecoding) {
-              // 如果已经被取消，不处理结果
-              return;
+          try {
+            const blob = await item.getType(type);
+            
+            // 验证是否为有效的图片
+            if (blob && blob.type.startsWith('image/') && blob.size > 0) {
+              // 进一步验证图片是否可以加载
+              const isValid = await validateImageBlob(blob);
+              if (isValid) {
+                validImage = blob;
+                imageFound = true;
+                break;
+              }
             }
-            handleDecodeResult(result);
-            imageFound = true;
-            break;
+          } catch (err) {
+            console.error('读取剪贴板项失败:', err);
+            continue;
           }
         }
         if (imageFound) break;
       }
       
-      if (!imageFound && isDecoding) {
-        showToast('剪贴板中没有图片');
+      if (!imageFound || !validImage) {
+        showToast('剪贴板中没有有效的图片');
         showAction();
+        return;
       }
+      
+      showLoading('正在解析图片...');
+      const dataUrl = await blobToDataURL(validImage);
+      const result = await decodeWithBackground(dataUrl);
+      
+      if (!isDecoding) {
+        return;
+      }
+      handleDecodeResult(result);
+      
     } catch (err) {
       console.error('读取剪贴板失败:', err);
       if (isDecoding) {
+        let errorMsg = '读取剪贴板失败';
         if (err.name === 'NotAllowedError') {
-          showToast('请先在浏览器设置中允许读取剪贴板权限');
-        } else {
-          showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
+          errorMsg = '请允许剪贴板读取权限';
+        } else if (err.name === 'ReadError') {
+          errorMsg = '剪贴板内容格式不支持';
+        } else if (err.message) {
+          errorMsg = err.message;
         }
+        showToast(errorMsg);
         showAction();
       }
     } finally {
@@ -144,31 +239,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   
+  // 验证图片blob是否有效
+  async function validateImageBlob(blob) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(true);
+      };
+      
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(false);
+      };
+      
+      img.src = url;
+      
+      // 超时处理
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        resolve(false);
+      }, 3000);
+    });
+  }
+  
   // 取消识别
   btnCancel.addEventListener('click', () => {
     cancelCurrentDecode();
     showToast('已取消识别');
     showAction();
+    // 清除全局状态
+    chrome.storage.local.remove(['isDecoding', 'decodeStartTime', 'lastResult']);
   });
   
   btnBack.addEventListener('click', () => {
-    // 取消任何正在进行的识别
     cancelCurrentDecode();
-    chrome.storage.local.remove('lastResult');
+    chrome.storage.local.remove(['lastResult', 'isDecoding', 'decodeStartTime']);
     showAction();
   });
 
   function showAction() {
-    // 清理状态
     cancelCurrentDecode();
     
     viewAction.classList.add('active');
     viewLoading.classList.remove('active');
     viewResult.classList.remove('active');
     chrome.action.setBadgeText({ text: '' });
+    
+    // 清除全局状态
+    chrome.storage.local.remove(['isDecoding', 'decodeStartTime']);
   }
 
   function showLoading(message = '正在识别二维码...') {
+    cancelCurrentDecode(); // 切换到加载页面前取消任何正在进行的识别
+    
     viewAction.classList.remove('active');
     viewLoading.classList.add('active');
     viewResult.classList.remove('active');
@@ -247,9 +373,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 调用 background 进行解析
   async function decodeWithBackground(dataUrl) {
     return new Promise((resolve, reject) => {
-      // 创建 AbortController 用于取消请求
       currentAbortController = new AbortController();
       isDecoding = true;
+      
+      // 保存全局状态
+      chrome.storage.local.set({
+        isDecoding: true,
+        decodeStartTime: Date.now()
+      });
       
       // 设置超时
       const timeoutId = setTimeout(() => {
@@ -293,24 +424,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentAbortController = null;
     }
     isDecoding = false;
+    currentDecodePromise = null;
   }
 
   function clearCurrentDecode() {
     currentAbortController = null;
     isDecoding = false;
+    currentDecodePromise = null;
+    // 清除全局状态
+    chrome.storage.local.remove(['isDecoding', 'decodeStartTime']);
   }
 
   function handleDecodeResult(result) {
     if (!isDecoding) return;
     
     if (result.result && !result.error) {
-      // 将结果存入 storage
       chrome.storage.local.set({
         lastResult: {
           text: result.result,
           isError: false,
           timestamp: Date.now()
-        }
+        },
+        isDecoding: false
       });
       showResult({ text: result.result, isError: false });
     } else {
@@ -320,10 +455,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           text: errMsg,
           isError: true,
           timestamp: Date.now()
-        }
+        },
+        isDecoding: false
       });
       showResult({ text: errMsg, isError: true });
     }
+    
+    // 清除识别状态
+    chrome.storage.local.remove('decodeStartTime');
   }
 
   async function copyToClipboard(text) {

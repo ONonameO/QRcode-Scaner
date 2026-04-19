@@ -8,6 +8,7 @@
     "activeTab",
     "scripting",
     "clipboardWrite",
+    "clipboardRead",
     "offscreen",
     "storage"
   ],

@@ -45,11 +45,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // 接收 popup 和 content script 消息
-chrome.runtime.onMessage.addListener((request) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startAreaSelection') {
     injectAreaSelector();
+    sendResponse({ success: true });
   } else if (request.action === 'areaSelected') {
     handleCapture(request.area);
+    sendResponse({ success: true });
+  } else if (request.action === 'decodeImage') {
+    // 新增：处理图片解析请求
+    decodeWithCaoliaoAPI(request.dataUrl).then(result => {
+      sendResponse(result);
+    }).catch(err => {
+      sendResponse({ result: null, error: err.message });
+    });
+    return true; // 保持消息通道开放
+  } else if (request.action === 'cropImage') {
+    // 这个由 offscreen.js 处理
+    return false;
   }
   return true;
 });
@@ -80,7 +93,7 @@ async function handleCapture(area) {
   }
 }
 
-// 调用草料 API
+// 调用草料 API - 修改为支持多结果返回
 async function decodeWithCaoliaoAPI(dataUrl) {
   const blob = dataURLtoBlob(dataUrl);
   const formData = new FormData();
@@ -106,37 +119,57 @@ async function decodeWithCaoliaoAPI(dataUrl) {
       return { result: null, error: '未识别到二维码' };
     }
     
-    const content = result.data.contents[0];
-    if (!content || typeof content !== 'string' || content.trim() === '') {
+    // 过滤空内容
+    const contents = result.data.contents.filter(c => c && typeof c === 'string' && c.trim() !== '');
+    
+    if (contents.length === 0) {
       return { result: null, error: '识别结果为空' };
     }
     
-    return { result: content.trim(), error: null };
+    // 返回所有结果
+    return { result: contents, error: null };
     
   } catch (err) {
     return { result: null, error: `网络请求失败: ${err.message}` };
   }
 }
 
-// ✅ 核心修改：结果存入 storage，popup 自动读取展示
+// 修改 handleResult 以支持多结果
 async function handleResult({ result, error }) {
-  const isSuccess = result && typeof result === 'string' && result.trim() !== '';
+  const isSuccess = result && (!error);
   
   if (isSuccess) {
-    await chrome.storage.local.set({
-      lastResult: {
-        text: result,
-        isError: false,
-        timestamp: Date.now()
+    // result 可能是数组或字符串
+    const resultToStore = Array.isArray(result) ? result : [result];
+    const validResults = resultToStore.filter(r => r && typeof r === 'string' && r.trim() !== '');
+    
+    if (validResults.length === 0) {
+      await chrome.storage.local.set({
+        lastResult: {
+          text: '未识别到有效内容',
+          isError: true,
+          timestamp: Date.now()
+        }
+      });
+      chrome.action.setBadgeText({ text: '!' });
+      chrome.action.setBadgeBackgroundColor({ color: '#ff4d4f' });
+    } else {
+      await chrome.storage.local.set({
+        lastResult: {
+          text: validResults,
+          isError: false,
+          timestamp: Date.now()
+        }
+      });
+      
+      chrome.action.setBadgeText({ text: '1' });
+      chrome.action.setBadgeBackgroundColor({ color: '#07c160' });
+      
+      // 静默复制第一个结果到剪贴板
+      if (validResults.length > 0) {
+        copyToClipboard(validResults[0]).catch(() => {});
       }
-    });
-    
-    // 设置角标提示用户有新结果
-    chrome.action.setBadgeText({ text: '1' });
-    chrome.action.setBadgeBackgroundColor({ color: '#07c160' });
-    
-    // 静默复制到剪贴板
-    copyToClipboard(result).catch(() => {});
+    }
   } else {
     const errMsg = error || '未识别到二维码';
     
@@ -151,7 +184,7 @@ async function handleResult({ result, error }) {
     chrome.action.setBadgeText({ text: '!' });
     chrome.action.setBadgeBackgroundColor({ color: '#ff4d4f' });
   }
-  chrome.action.openPopup()
+  chrome.action.openPopup();
 }
 
 // 注入区域选择脚本

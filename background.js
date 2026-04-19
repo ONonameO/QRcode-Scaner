@@ -151,6 +151,7 @@ async function handleResult({ result, error }) {
     chrome.action.setBadgeText({ text: '!' });
     chrome.action.setBadgeBackgroundColor({ color: '#ff4d4f' });
   }
+  chrome.action.openPopup()
 }
 
 // 注入区域选择脚本

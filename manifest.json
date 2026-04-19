@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "二维码识别器（草料API版）",
+  "version": "2.0.0",
+  "description": "右键识别或截图识别二维码，使用草料二维码API",
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "clipboardWrite",
+    "offscreen",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "32": "icon.png"
+    }
+  },
+  "icons": {
+    "32": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["offscreen.html", "offscreen.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

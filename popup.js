@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const viewAction = document.getElementById('view-action');
+  const viewLoading = document.getElementById('view-loading');
   const viewResult = document.getElementById('view-result');
   const resultIcon = document.getElementById('result-icon');
   const resultTitle = document.getElementById('result-title');
@@ -9,8 +10,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnArea = document.getElementById('btn-area');
   const btnFile = document.getElementById('btn-file');
   const btnClipboard = document.getElementById('btn-clipboard');
+  const btnCancel = document.getElementById('btn-cancel');
   const fileInput = document.getElementById('file-input');
   const toast = document.getElementById('toast');
+
+  let currentAbortController = null;
+  let isDecoding = false;
 
   // 检查是否有待显示的结果（5分钟内有效）
   const { lastResult } = await chrome.storage.local.get('lastResult');
@@ -25,7 +30,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 框选区域
-  btnArea.addEventListener('click', startAreaSelection);
+  btnArea.addEventListener('click', async () => {
+    try {
+      // 先保存当前标签页ID
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) {
+        showToast('无法获取当前页面');
+        return;
+      }
+      
+      // 注入content script并启动框选
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js']
+      });
+      
+      // 发送消息启动框选
+      await chrome.tabs.sendMessage(tab.id, { action: 'startAreaSelection' });
+      window.close();
+    } catch (err) {
+      console.error('启动框选失败:', err);
+      showToast('启动框选失败，请刷新页面重试');
+    }
+  });
   
   // 上传图片
   btnFile.addEventListener('click', () => {
@@ -36,22 +63,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     const file = e.target.files[0];
     if (!file) return;
     
-    showToast('正在解析...');
+    // 取消之前的识别
+    cancelCurrentDecode();
+    
+    showLoading('正在解析图片...');
     
     try {
       const dataUrl = await fileToDataURL(file);
       const result = await decodeWithBackground(dataUrl);
+      if (!isDecoding) {
+        // 如果已经被取消，不处理结果
+        return;
+      }
       handleDecodeResult(result);
     } catch (err) {
-      handleDecodeResult({ result: null, error: err.message });
+      if (isDecoding && err.message !== '用户取消识别') {
+        handleDecodeResult({ result: null, error: err.message });
+      }
     } finally {
-      fileInput.value = ''; // 清空，允许重新选择同一文件
+      fileInput.value = '';
+      clearCurrentDecode();
     }
   });
   
   // 读取剪贴板图片
   btnClipboard.addEventListener('click', async () => {
     try {
+      // 取消之前的识别
+      cancelCurrentDecode();
+      
       // 检查剪贴板权限
       const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' });
       
@@ -60,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       
-      showToast('正在读取剪贴板...');
+      showLoading('正在读取剪贴板...');
       const clipboardItems = await navigator.clipboard.read();
       
       let imageFound = false;
@@ -71,8 +111,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           const blob = await item.getType(type);
           if (blob && blob.type.startsWith('image/')) {
             const dataUrl = await blobToDataURL(blob);
-            showToast('正在解析图片...');
+            showLoading('正在解析图片...');
             const result = await decodeWithBackground(dataUrl);
+            if (!isDecoding) {
+              // 如果已经被取消，不处理结果
+              return;
+            }
             handleDecodeResult(result);
             imageFound = true;
             break;
@@ -81,32 +125,63 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (imageFound) break;
       }
       
-      if (!imageFound) {
+      if (!imageFound && isDecoding) {
         showToast('剪贴板中没有图片');
+        showAction();
       }
     } catch (err) {
       console.error('读取剪贴板失败:', err);
-      if (err.name === 'NotAllowedError') {
-        showToast('请先在浏览器设置中允许读取剪贴板权限');
-      } else {
-        showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
+      if (isDecoding) {
+        if (err.name === 'NotAllowedError') {
+          showToast('请先在浏览器设置中允许读取剪贴板权限');
+        } else {
+          showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
+        }
+        showAction();
       }
+    } finally {
+      clearCurrentDecode();
     }
   });
   
+  // 取消识别
+  btnCancel.addEventListener('click', () => {
+    cancelCurrentDecode();
+    showToast('已取消识别');
+    showAction();
+  });
+  
   btnBack.addEventListener('click', () => {
+    // 取消任何正在进行的识别
+    cancelCurrentDecode();
     chrome.storage.local.remove('lastResult');
     showAction();
   });
 
   function showAction() {
+    // 清理状态
+    cancelCurrentDecode();
+    
     viewAction.classList.add('active');
+    viewLoading.classList.remove('active');
     viewResult.classList.remove('active');
     chrome.action.setBadgeText({ text: '' });
   }
 
+  function showLoading(message = '正在识别二维码...') {
+    viewAction.classList.remove('active');
+    viewLoading.classList.add('active');
+    viewResult.classList.remove('active');
+    
+    const loadingText = document.querySelector('.loading-text');
+    if (loadingText) {
+      loadingText.textContent = message;
+    }
+  }
+
   function showResult(data) {
     viewAction.classList.remove('active');
+    viewLoading.classList.remove('active');
     viewResult.classList.add('active');
     
     if (data.isError) {
@@ -169,33 +244,65 @@ document.addEventListener('DOMContentLoaded', async () => {
            /^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}(:[0-9]{1,5})?(\/.*)?$/i.test(trimmed);
   }
 
-  async function startAreaSelection() {
-    try {
-      await chrome.runtime.sendMessage({ action: 'startAreaSelection' });
-      window.close();
-    } catch (err) {
-      console.error('启动框选失败:', err);
-      showToast('启动框选失败');
-    }
-  }
-
   // 调用 background 进行解析
   async function decodeWithBackground(dataUrl) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      // 创建 AbortController 用于取消请求
+      currentAbortController = new AbortController();
+      isDecoding = true;
+      
+      // 设置超时
+      const timeoutId = setTimeout(() => {
+        if (currentAbortController) {
+          currentAbortController.abort();
+          reject(new Error('识别超时（30秒）'));
+        }
+      }, 30000);
+      
+      // 发送消息到 background
       chrome.runtime.sendMessage({ 
         action: 'decodeImage', 
-        dataUrl: dataUrl 
+        dataUrl: dataUrl
       }, (response) => {
+        clearTimeout(timeoutId);
+        
+        if (!isDecoding) {
+          reject(new Error('用户取消识别'));
+          return;
+        }
+        
         if (chrome.runtime.lastError) {
-          resolve({ result: null, error: chrome.runtime.lastError.message });
+          reject(new Error(chrome.runtime.lastError.message));
         } else {
           resolve(response);
         }
       });
+      
+      // 监听取消信号
+      currentAbortController.signal.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        isDecoding = false;
+        reject(new Error('用户取消识别'));
+      });
     });
   }
 
+  function cancelCurrentDecode() {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+    isDecoding = false;
+  }
+
+  function clearCurrentDecode() {
+    currentAbortController = null;
+    isDecoding = false;
+  }
+
   function handleDecodeResult(result) {
+    if (!isDecoding) return;
+    
     if (result.result && !result.error) {
       // 将结果存入 storage
       chrome.storage.local.set({

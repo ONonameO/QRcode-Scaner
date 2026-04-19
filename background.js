@@ -29,8 +29,6 @@ setupOffscreen();
 
 // 右键菜单：识别图片中的二维码
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== 'decodeQR') return;
-  
   try {
     let dataUrl = info.srcUrl;
     if (!dataUrl.startsWith('data:')) {
@@ -47,13 +45,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // 接收 popup 和 content script 消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startAreaSelection') {
-    injectAreaSelector();
+    // 这个由 content script 处理
     sendResponse({ success: true });
+    return true;
   } else if (request.action === 'areaSelected') {
     handleCapture(request.area);
     sendResponse({ success: true });
+    return true;
   } else if (request.action === 'decodeImage') {
-    // 新增：处理图片解析请求
+    // 处理图片解析
     decodeWithCaoliaoAPI(request.dataUrl).then(result => {
       sendResponse(result);
     }).catch(err => {
@@ -61,7 +61,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true; // 保持消息通道开放
   } else if (request.action === 'cropImage') {
-    // 这个由 offscreen.js 处理
+    // 这个由 offscreen.js 处理，但需要转发
     return false;
   }
   return true;
@@ -75,10 +75,15 @@ async function handleCapture(area) {
     let finalDataUrl = dataUrl;
     if (area && area.width > 0 && area.height > 0) {
       await setupOffscreen();
-      const cropResult = await chrome.runtime.sendMessage({
-        action: 'cropImage',
-        dataUrl: dataUrl,
-        area: area
+      // 发送到 offscreen 进行裁剪
+      const cropResult = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'cropImage',
+          dataUrl: dataUrl,
+          area: area
+        }, (response) => {
+          resolve(response);
+        });
       });
       
       if (cropResult && cropResult.success) {
@@ -93,17 +98,24 @@ async function handleCapture(area) {
   }
 }
 
-// 调用草料 API - 修改为支持多结果返回
+// 调用草料 API
 async function decodeWithCaoliaoAPI(dataUrl) {
   const blob = dataURLtoBlob(dataUrl);
   const formData = new FormData();
   formData.append('file', blob, 'qrcode.png');
   
+  // 设置30秒超时
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  
   try {
     const response = await fetch(CAOLIAO_API, {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -130,6 +142,10 @@ async function decodeWithCaoliaoAPI(dataUrl) {
     return { result: contents, error: null };
     
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      return { result: null, error: '请求超时（30秒）' };
+    }
     return { result: null, error: `网络请求失败: ${err.message}` };
   }
 }
@@ -184,16 +200,9 @@ async function handleResult({ result, error }) {
     chrome.action.setBadgeText({ text: '!' });
     chrome.action.setBadgeBackgroundColor({ color: '#ff4d4f' });
   }
+  
+  // 自动打开 popup 显示结果
   chrome.action.openPopup();
-}
-
-// 注入区域选择脚本
-async function injectAreaSelector() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['content.js']
-  });
 }
 
 // 获取图片 DataURL

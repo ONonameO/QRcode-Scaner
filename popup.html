@@ -7,23 +7,39 @@
 <body>
   <!-- 操作视图 -->
   <div id="view-action" class="view active">
-    <h3>二维码识别</h3>
+    <h3>📷 二维码识别</h3>
     <div class="btn-group">
-      <button id="btn-area" class="btn btn-area">
-        <span>⬚</span>
-        <span>框选网页区域</span>
-      </button>
-      <button id="btn-file" class="btn btn-file">
-        <span>📁</span>
-        <span>上传本地图片</span>
-      </button>
+      
       <button id="btn-clipboard" class="btn btn-clipboard">
         <span>📋</span>
-        <span>粘贴自剪贴板</span>
+        <span>粘贴剪贴板</span>
       </button>
+
+      <button id="btn-file" class="btn btn-file">
+        <span>📁</span>
+        <span>上传图片</span>
+      </button>
+
+      <button id="btn-area" class="btn btn-area">
+        <span>⬚</span>
+        <span>框选区域</span>
+      </button>
+
     </div>
+
     <div class="tip">
       💡 提示：框选识别需要拖拽鼠标选择二维码区域，按 ESC 取消
+    </div>
+
+  </div>
+
+  <!-- 加载视图 -->
+  <div id="view-loading" class="view">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在识别二维码...</div>
+      <div class="loading-hint">请稍候，正在解析图片内容</div>
+      <button id="btn-cancel" class="btn-cancel">取消识别</button>
     </div>
   </div>
 
@@ -36,7 +52,7 @@
     </div>
     <div class="result-list" id="result-list"></div>
     <div class="footer-actions">
-      <button class="btn-back" id="btn-back">← 返回</button>
+      <button class="btn-back" id="btn-back">↩ 返回</button>
     </div>
   </div>
 

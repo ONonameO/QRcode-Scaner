@@ -13,19 +13,23 @@ function cropImage(dataUrl, area) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      canvas.width = area.width;
-      canvas.height = area.height;
-      
-      ctx.drawImage(
-        img, 
-        area.x, area.y, area.width, area.height,
-        0, 0, area.width, area.height
-      );
-      
-      resolve(canvas.toDataURL('image/png'));
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = area.width;
+        canvas.height = area.height;
+        
+        ctx.drawImage(
+          img, 
+          area.x, area.y, area.width, area.height,
+          0, 0, area.width, area.height
+        );
+        
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        reject(new Error('裁剪失败: ' + err.message));
+      }
     };
     img.onerror = () => reject(new Error('图片加载失败'));
     img.src = dataUrl;

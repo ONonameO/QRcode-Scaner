@@ -25,6 +25,11 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 setupOffscreen();
 
+function setBadge(text, color) {
+  chrome.action.setBadgeText({ text });
+  if (color) chrome.action.setBadgeBackgroundColor({ color });
+}
+
 // ==================== 消息处理 ====================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
@@ -38,7 +43,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(err => sendResponse({ result: null, error: err.message }));
       return true;
     case 'cropImage':
-      return false; // 由 offscreen.js 处理
+      return false;
   }
   return true;
 });
@@ -46,10 +51,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // 右键菜单识别
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
+    // 1. 先保存解码状态（让 popup 知道正在识别）
+    await saveDecodingState(null, '正在识别二维码...');
+    
+    // 2. 立即打开 popup 显示加载页面
+    chrome.action.openPopup();
+    setBadge('···', '#f7d22f');
+    
+    // 3. 获取图片数据
     let dataUrl = info.srcUrl;
     if (!dataUrl.startsWith('data:')) {
       dataUrl = await fetchImageAsDataURL(info.srcUrl);
     }
+    
+    // 4. 更新解码状态中的 dataUrl
+    await updateDecodingStateDataUrl(dataUrl);
+    
+    // 5. 调用 API 识别
     const result = await decodeWithCaoliaoAPI(dataUrl);
     saveResult(result);
   } catch (err) {
@@ -60,9 +78,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // ==================== 核心功能 ====================
 async function handleCapture(area) {
   try {
+    // 1. 先保存解码状态（让 popup 知道正在识别）
+    await saveDecodingState(null, '正在识别二维码...');
+    
+    // 2. 立即打开 popup 显示加载页面
+    chrome.action.openPopup();
+    setBadge('···', '#f7d22f');
+    
+    // 3. 截图
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
     let finalDataUrl = dataUrl;
     
+    // 4. 裁剪图片（如果需要）
     if (area && area.width > 0 && area.height > 0) {
       await setupOffscreen();
       const cropResult = await new Promise((resolve) => {
@@ -75,6 +102,10 @@ async function handleCapture(area) {
       if (cropResult?.success) finalDataUrl = cropResult.dataUrl;
     }
     
+    // 5. 更新解码状态中的 dataUrl
+    await updateDecodingStateDataUrl(finalDataUrl);
+    
+    // 6. 调用 API 识别
     const result = await decodeWithCaoliaoAPI(finalDataUrl);
     saveResult(result);
   } catch (err) {
@@ -122,6 +153,34 @@ async function decodeWithCaoliaoAPI(dataUrl) {
   }
 }
 
+// ==================== 解码状态管理 ====================
+async function saveDecodingState(dataUrl, message) {
+  await chrome.storage.local.set({
+    decodingState: {
+      isDecoding: true,
+      dataUrl: dataUrl,
+      message: message,
+      timestamp: Date.now()
+    }
+  });
+}
+
+async function updateDecodingStateDataUrl(dataUrl) {
+  const { decodingState } = await chrome.storage.local.get('decodingState');
+  if (decodingState) {
+    await chrome.storage.local.set({
+      decodingState: {
+        ...decodingState,
+        dataUrl: dataUrl
+      }
+    });
+  }
+}
+
+async function clearDecodingState() {
+  await chrome.storage.local.remove('decodingState');
+}
+
 // ==================== 结果存储 ====================
 async function saveResult({ result, error }) {
   const isSuccess = result && !error;
@@ -133,13 +192,18 @@ async function saveResult({ result, error }) {
     if (validResults.length === 0) {
       await storeResult('未识别到有效内容', true);
     } else {
-      await storeResult(validResults, false)
+      await storeResult(validResults, false);
     }
   } else {
     await storeResult(error || '未识别到二维码', true);
   }
   
-  chrome.action.openPopup();
+  // 清除解码状态
+  await clearDecodingState();
+  
+  // 注意：popup 已经打开，结果会通过 storage 变化自动更新
+  // 触发 storage 变化事件，让 popup 知道结果已准备好
+  chrome.storage.local.get('lastResult', () => {});
 }
 
 async function storeResult(text, isError) {

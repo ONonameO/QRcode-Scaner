@@ -27,14 +27,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   elements.fileInput = document.getElementById(DOM.fileInput);
   elements.toast = document.getElementById(DOM.toast);
   
+  // 监听 storage 变化，自动更新结果
+  chrome.storage.onChanged.addListener(async (changes, areaName) => {
+    if (areaName === 'local') {
+      // 当 lastResult 变化时，自动渲染结果
+      if (changes.lastResult) {
+        const newResult = changes.lastResult.newValue;
+        if (newResult && !changes.decodingState) {
+          // 有新的结果，且没有正在进行的识别
+          renderResult(newResult);
+        }
+      }
+      
+      // 当 decodingState 被清除且已有结果时，结果已渲染
+      if (changes.decodingState && !changes.decodingState.newValue) {
+        const { lastResult } = await chrome.storage.local.get('lastResult');
+        if (lastResult) {
+          renderResult(lastResult);
+        }
+      }
+    }
+  });
+  
   // 恢复状态
   const { decodingState, lastResult } = await chrome.storage.local.get(['decodingState', 'lastResult']);
   
+  // 优先显示正在识别的状态
   if (decodingState?.isDecoding && (Date.now() - decodingState.timestamp < 60000)) {
     showView('loading');
-    if (decodingState.dataUrl) continueDecode(decodingState.dataUrl);
+    // 如果有 dataUrl 且没有结果，继续等待
+    if (decodingState.dataUrl && !lastResult) {
+      // 已经在加载状态，等待结果
+    }
   } else if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
-    // 统一使用 renderResult 渲染
     renderResult(lastResult);
   } else {
     showView('action');
@@ -58,8 +83,8 @@ function showView(viewName) {
 
 function showLoading(message = '正在识别二维码...') {
   showView('loading');
-  document.querySelector('.loading-text').textContent = message;
   setBadge('···', '#f7d22f');
+  document.querySelector('.loading-text').textContent = message;
 }
 
 function showAction() {
@@ -237,7 +262,6 @@ async function handleFileUpload(e) {
 // ==================== 剪贴板 ====================
 async function handleClipboard() {
   try {
-    showToast('正在检查剪贴板...');
     
     let clipboardItems;
     try {

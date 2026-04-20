@@ -98,6 +98,7 @@ h3 {
 /* 提示文字 */
 .tip {
   font-size: 14px;
+  font-weight: bold;
   color: #666;
   margin-top: 16px;
   line-height: 1.5;
@@ -176,7 +177,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  /* margin-bottom: 10px; */
   padding-bottom: 14px;
   border-bottom: 2px solid #f0f0f0;
 }
@@ -210,9 +211,10 @@ h3 {
 
 /* 多结果列表 */
 .result-list {
-  max-height: 450px;
+  max-height: 400px;
   overflow-y: auto;
-  margin-bottom: 16px;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .result-list::-webkit-scrollbar {
@@ -237,7 +239,8 @@ h3 {
   background: #f8f9fa;
   border-radius: 10px;
   padding: 14px;
-  margin-bottom: 12px;
+  margin-top: 10px;
+  margin-bottom: 10px;
   border: 1px solid #e9ecef;
   transition: all 0.2s;
 }

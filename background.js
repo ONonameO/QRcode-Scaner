@@ -235,3 +235,28 @@ function dataURLtoBlob(dataUrl) {
   }
   return new Blob([u8arr], { type: mime });
 }
+
+// ==================== 结果过期清理 ====================
+
+// 监听 storage 变化，当 lastResult 被设置时，设置一个定时器在过期时清除
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.lastResult) {
+    const newResult = changes.lastResult.newValue;
+    if (newResult) {
+      // 计算还需要多久过期
+      const elapsed = Date.now() - newResult.timestamp;
+      const remaining = Math.max(0, 300000 - elapsed);
+      
+      // 设置定时器，在过期时清除角标
+      setTimeout(async () => {
+        const { lastResult: currentResult } = await chrome.storage.local.get('lastResult');
+        // 检查这个结果是否还是同一个（没有被新结果覆盖）
+        if (currentResult && currentResult.timestamp === newResult.timestamp) {
+          await chrome.storage.local.remove('lastResult');
+          chrome.action.setBadgeText({ text: '' });
+          console.log('[QR] 识别结果已过期（定时器），角标已清除');
+        }
+      }, remaining);
+    }
+  }
+});

@@ -87,11 +87,11 @@
     </ul>
 
     <h2>第三方服务</h2>
-    <p>本扩展使用草料二维码API（<code>https://api.2dcode.biz</code>）进行二维码识别。您的图片数据会被发送至该API服务器进行解析。请参阅草料二维码的隐私策略了解其数据处理方式。</p>
+    <p>本扩展使用草料二维码API（<a href="https://api.2dcode.biz/v1/read-qr-code">https://api.2dcode.biz/v1/read-qr-code</a>）进行二维码识别。您的图片数据会被发送至该API服务器进行解析。请参阅<a href="https://cli.im/open-api/qrcode-api/read-qr-code.html">草料二维码解码API</a>了解其数据处理方式。</p>
 
     <h2>数据存储</h2>
     <ul>
-        <li>识别结果使用Chrome扩展本地存储API（<code>chrome.storage.local</code>）保存</li>
+        <li>识别结果使用Chrome扩展本地存储API（chrome.storage.local）保存</li>
         <li>保存期限为5分钟，超时后自动清除</li>
         <li>用户可以点击"返回"按钮手动清除历史结果</li>
     </ul>

@@ -341,12 +341,15 @@ h3 {
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
-  white-space: nowrap;
   z-index: 1000;
   text-align: center;
   line-height: 1.4;
+  white-space: normal;
+  max-width: 300px;
+  word-break: keep-all;
 }
 
+/* 支持多行显示 */
 .toast.show {
   opacity: 1;
 }

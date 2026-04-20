@@ -153,6 +153,8 @@ async function decodeWithCaoliaoAPI(dataUrl) {
 // 修改 handleResult 以支持多结果
 async function handleResult({ result, error }) {
   const isSuccess = result && (!error);
+
+  // chrome.action.setBadgeText({ text: '' });
   
   if (isSuccess) {
     // result 可能是数组或字符串
@@ -177,14 +179,12 @@ async function handleResult({ result, error }) {
           timestamp: Date.now()
         }
       });
-      
-      chrome.action.setBadgeText({ text: '1' });
+
+      const resultCount = validResults.length;
+      const badgeText = resultCount > 99 ? '99+' : resultCount.toString();
+      chrome.action.setBadgeText({ text: badgeText });
       chrome.action.setBadgeBackgroundColor({ color: '#07c160' });
       
-      // 静默复制第一个结果到剪贴板
-      if (validResults.length > 0) {
-        copyToClipboard(validResults[0]).catch(() => {});
-      }
     }
   } else {
     const errMsg = error || '未识别到二维码';
@@ -230,29 +230,4 @@ function dataURLtoBlob(dataUrl) {
     u8arr[n] = bstr.charCodeAt(n);
   }
   return new Blob([u8arr], { type: mime });
-}
-
-// 复制到剪贴板
-async function copyToClipboard(text) {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-    
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (txt) => {
-        navigator.clipboard.writeText(txt).catch(() => {
-          const ta = document.createElement('textarea');
-          ta.value = txt;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
-        });
-      },
-      args: [text]
-    });
-  } catch (e) {
-    console.error('复制失败:', e);
-  }
 }

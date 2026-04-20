@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "二维码识别器（草料API版）",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "右键识别或截图识别二维码，使用草料二维码API",
   "permissions": [
     "contextMenus",
@@ -21,11 +21,17 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "32": "icon.png"
+      "32": "icons/icon32.png",
+      "64": "icons/icon64.png",
+      "128": "icons/icon128.png",
+      "256": "icons/icon256.png"
     }
   },
   "icons": {
-    "32": "icon.png"
+    "32": "icons/icon32.png",
+    "64": "icons/icon64.png",
+    "128": "icons/icon128.png",
+    "256": "icons/icon256.png"
   },
   "web_accessible_resources": [
     {

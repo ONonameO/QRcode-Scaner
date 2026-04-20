@@ -62,25 +62,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 框选区域
   btnArea.addEventListener('click', async () => {
     try {
-      // 保存当前标签页ID
+      // 获取当前活动标签页
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab) {
         showToast('无法获取当前页面');
         return;
       }
       
-      // 注入content script并启动框选
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['content.js']
-      });
+      // 检查是否可以在当前页面执行脚本
+      // chrome:// 和 edge:// 等内部页面无法注入脚本
+      if (tab.url.startsWith('chrome://') || 
+          tab.url.startsWith('edge://') || 
+          tab.url.startsWith('about:') ||
+          tab.url.startsWith('chrome-extension://')) {
+        showToast('无法在浏览器内部页面使用框选功能\n请在其他网页上使用');
+        return;
+      }
+      
+      // 检查页面是否可访问
+      try {
+        // 尝试注入content script
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+      } catch (err) {
+        console.error('注入脚本失败:', err);
+        showToast('当前页面不支持框选功能，请刷新后重试');
+        return;
+      }
       
       // 发送消息启动框选
       await chrome.tabs.sendMessage(tab.id, { action: 'startAreaSelection' });
       window.close();
     } catch (err) {
       console.error('启动框选失败:', err);
-      showToast('启动框选失败，请刷新页面重试');
+      if (err.message && err.message.includes('chrome://')) {
+        showToast('无法在浏览器内部页面使用框选功能');
+      } else {
+        showToast('启动框选失败: ' + (err.message || '未知错误'));
+      }
     }
   });
   
@@ -295,7 +316,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     viewAction.classList.remove('active');
     viewLoading.classList.add('active');
     viewResult.classList.remove('active');
-    
+
+    chrome.action.setBadgeText({ text: '···' });
+    chrome.action.setBadgeBackgroundColor({ color: '#f7d22f' });
+
     const loadingText = document.querySelector('.loading-text');
     if (loadingText) {
       loadingText.textContent = message;
@@ -360,7 +384,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     
-    chrome.action.setBadgeText({ text: '' });
   }
 
   function isURL(str) {
@@ -482,9 +505,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function showToast(message) {
+    // 检查是否包含换行符
+    const hasNewline = message.includes('\n');
+    
     toast.textContent = message;
+    
+    // 如果有换行符，添加 multiline 类
+    if (hasNewline) {
+      toast.classList.add('multiline');
+    } else {
+      toast.classList.remove('multiline');
+    }
+    
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2000);
+    setTimeout(() => {
+      toast.classList.remove('show');
+      toast.classList.remove('multiline');
+    }, 1500);
   }
 
   function fileToDataURL(file) {

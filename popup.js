@@ -1,559 +1,377 @@
+// ==================== DOM 元素 ====================
+const DOM = {
+  views: { action: 'view-action', loading: 'view-loading', result: 'view-result' },
+  result: { icon: 'result-icon', title: 'result-title', count: 'result-count', list: 'result-list' },
+  btns: { area: 'btn-area', file: 'btn-file', clipboard: 'btn-clipboard', cancel: 'btn-cancel', back: 'btn-back' },
+  fileInput: 'file-input',
+  toast: 'toast'
+};
+
+let elements = {};
+let currentAbortController = null;
+let isDecoding = false;
+
+// ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', async () => {
-  const viewAction = document.getElementById('view-action');
-  const viewLoading = document.getElementById('view-loading');
-  const viewResult = document.getElementById('view-result');
-  const resultIcon = document.getElementById('result-icon');
-  const resultTitle = document.getElementById('result-title');
-  const resultCount = document.getElementById('result-count');
-  const resultList = document.getElementById('result-list');
-  const btnBack = document.getElementById('btn-back');
-  const btnArea = document.getElementById('btn-area');
-  const btnFile = document.getElementById('btn-file');
-  const btnClipboard = document.getElementById('btn-clipboard');
-  const btnCancel = document.getElementById('btn-cancel');
-  const fileInput = document.getElementById('file-input');
-  const toast = document.getElementById('toast');
-
-  let currentAbortController = null;
-  let isDecoding = false;
-  let currentDecodePromise = null;
-
-  // 检查是否有正在进行的识别任务
-  const { decodingState } = await chrome.storage.local.get('decodingState');
-  
-  if (decodingState && decodingState.isDecoding && (Date.now() - decodingState.timestamp < 60000)) {
-    // 如果有正在进行的识别，恢复加载状态
-    showLoading(decodingState.message || '正在识别二维码...');
-    // 重新建立识别连接
-    if (decodingState.dataUrl) {
-      continueDecode(decodingState.dataUrl);
+  // 获取 DOM 元素
+  for (const [key, id] of Object.entries(DOM)) {
+    if (typeof id === 'string') {
+      elements[key] = document.getElementById(id);
+    } else if (typeof id === 'object') {
+      elements[key] = {};
+      for (const [subKey, subId] of Object.entries(id)) {
+        elements[key][subKey] = document.getElementById(subId);
+      }
     }
+  }
+  elements.fileInput = document.getElementById(DOM.fileInput);
+  elements.toast = document.getElementById(DOM.toast);
+  
+  // 恢复状态
+  const { decodingState, lastResult } = await chrome.storage.local.get(['decodingState', 'lastResult']);
+  
+  if (decodingState?.isDecoding && (Date.now() - decodingState.timestamp < 60000)) {
+    showView('loading');
+    if (decodingState.dataUrl) continueDecode(decodingState.dataUrl);
+  } else if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
+    // 统一使用 renderResult 渲染
+    renderResult(lastResult);
   } else {
-    // 检查是否有待显示的结果（5分钟内有效）
-    const { lastResult } = await chrome.storage.local.get('lastResult');
-    
-    if (lastResult && (Date.now() - lastResult.timestamp < 300000)) {
-      showResult(lastResult);
-    } else {
-      showAction();
-      if (lastResult) {
-        chrome.storage.local.remove('lastResult');
-      }
-    }
+    showView('action');
+    await chrome.storage.local.remove(['lastResult', 'decodingState']);
+  }
+  
+  // 绑定事件
+  elements.btns.area?.addEventListener('click', startAreaSelection);
+  elements.btns.file?.addEventListener('click', () => elements.fileInput.click());
+  elements.btns.clipboard?.addEventListener('click', handleClipboard);
+  elements.btns.cancel?.addEventListener('click', cancelDecode);
+  elements.btns.back?.addEventListener('click', backToAction);
+  elements.fileInput?.addEventListener('change', handleFileUpload);
+});
+
+// ==================== 视图控制 ====================
+function showView(viewName) {
+  Object.values(elements.views).forEach(view => view.classList.remove('active'));
+  elements.views[viewName]?.classList.add('active');
+}
+
+function showLoading(message = '正在识别二维码...') {
+  showView('loading');
+  document.querySelector('.loading-text').textContent = message;
+  setBadge('···', '#f7d22f');
+}
+
+function showAction() {
+  cancelCurrentDecode();
+  showView('action');
+  setBadge('', '');
+}
+
+// ==================== 统一结果渲染 ====================
+function renderResult(data) {
+  showView('result');
+  
+  // 识别失败
+  if (data.isError) {
+    setBadge('! ', '#ff4d4f');
+    elements.result.icon.textContent = '✗';
+    elements.result.icon.classList.add('error');
+    elements.result.title.textContent = '识别失败';
+    elements.result.count.textContent = '';
+    elements.result.list.innerHTML = `<div class="result-item">
+      <div class="result-item-content" style="color:#ff4d4f;">${escapeHtml(data.text)}</div>
+    </div>`;
+    return;
+  }
+  
+  // 处理多个结果
+  const results = Array.isArray(data.text) ? data.text : [data.text];
+  const validResults = results.filter(r => r?.trim());
+  const count = validResults.length;
+  
+  //0个结果
+  if (count === 0) {
+    setBadge('! ', '#ff4d4f');
+    elements.result.icon.textContent = '✗';
+    elements.result.icon.classList.add('error');
+    elements.result.title.textContent = '识别失败';
+    elements.result.count.textContent = '';
+    elements.result.list.innerHTML = `<div class="result-item">
+      <div class="result-item-content" style="color:#ff4d4f;">未识别到有效内容</div>
+    </div>`;
+    return;
   }
 
-  // 继续未完成的识别
-  async function continueDecode(dataUrl) {
-    try {
-      const result = await decodeWithBackground(dataUrl);
-      if (!isDecoding) {
-        return;
-      }
-      handleDecodeResult(result);
-    } catch (err) {
-      if (isDecoding && err.message !== '用户取消识别') {
-        handleDecodeResult({ result: null, error: err.message });
-      }
-    } finally {
-      clearCurrentDecode();
-    }
-  }
+  // 识别成功
 
-  // 框选区域
-  btnArea.addEventListener('click', async () => {
-    try {
-      // 获取当前活动标签页
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) {
-        showToast('无法获取当前页面');
-        return;
-      }
-      
-      // 检查是否可以在当前页面执行脚本
-      // chrome:// 和 edge:// 等内部页面无法注入脚本
-      if (tab.url.startsWith('chrome://') || 
-          tab.url.startsWith('edge://') || 
-          tab.url.startsWith('about:') ||
-          tab.url.startsWith('chrome-extension://')) {
-        showToast('无法在浏览器内部页面使用框选功能\n请在其他网页上使用');
-        return;
-      }
-      
-      // 检查页面是否可访问
-      try {
-        // 尝试注入content script
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content.js']
-        });
-      } catch (err) {
-        console.error('注入脚本失败:', err);
-        showToast('当前页面不支持框选功能，请刷新后重试');
-        return;
-      }
-      
-      // 发送消息启动框选
-      await chrome.tabs.sendMessage(tab.id, { action: 'startAreaSelection' });
-      window.close();
-    } catch (err) {
-      console.error('启动框选失败:', err);
-      if (err.message && err.message.includes('chrome://')) {
-        showToast('无法在浏览器内部页面使用框选功能');
-      } else {
-        showToast('启动框选失败: ' + (err.message || '未知错误'));
-      }
-    }
-  });
+  setBadge(count > 99 ? '99+' : count.toString(), '#07c160');
+  elements.result.icon.textContent = '✓';
+  elements.result.icon.classList.remove('error');
+  elements.result.title.textContent = '识别成功';
+  elements.result.count.textContent = `共 ${count} 个结果`;
+
+  elements.result.list.innerHTML = validResults.map(content => `
+    <div class="result-item">
+      <div class="result-item-content">${escapeHtml(content)}</div>
+      <div class="result-item-actions">
+        <button class="item-btn item-btn-copy">📋 复制</button>
+        ${isURL(content) ? '<button class="item-btn item-btn-open">🔗 打开链接</button>' : ''}
+      </div>
+    </div>
+  `).join('');
   
-  // 上传图片
-  btnFile.addEventListener('click', () => {
-    fileInput.click();
+  // 绑定按钮事件
+  document.querySelectorAll('.result-item').forEach((item, idx) => {
+    const content = validResults[idx];
+    item.querySelector('.item-btn-copy')?.addEventListener('click', () => copyToClipboard(content));
+    item.querySelector('.item-btn-open')?.addEventListener('click', () => openLink(content));
   });
-  
-  fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+}
+
+// ==================== 识别功能 ====================
+async function decodeWithBackground(dataUrl) {
+  return new Promise((resolve, reject) => {
+    currentAbortController = new AbortController();
+    isDecoding = true;
     
-    // 检查文件类型
-    if (!file.type.startsWith('image/')) {
-      showToast('请选择图片文件');
-      fileInput.value = '';
+    const timeoutId = setTimeout(() => {
+      currentAbortController?.abort();
+      reject(new Error('识别超时（30秒）'));
+    }, 30000);
+    
+    chrome.runtime.sendMessage({ action: 'decodeImage', dataUrl }, (response) => {
+      clearTimeout(timeoutId);
+      if (!isDecoding) return reject(new Error('用户取消识别'));
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(response);
+    });
+    
+    currentAbortController.signal.addEventListener('abort', () => {
+      clearTimeout(timeoutId);
+      isDecoding = false;
+      reject(new Error('用户取消识别'));
+    });
+  });
+}
+
+function cancelCurrentDecode() {
+  currentAbortController?.abort();
+  currentAbortController = null;
+  isDecoding = false;
+}
+
+async function cancelDecode() {
+  cancelCurrentDecode();
+  await chrome.storage.local.remove('decodingState');
+  showToast('已取消识别');
+  showAction();
+}
+
+async function backToAction() {
+  cancelCurrentDecode();
+  await chrome.storage.local.remove(['decodingState', 'lastResult']);
+  showAction();
+}
+
+function handleDecodeResult(result) {
+  if (!isDecoding) return;
+  
+  if (result.result && !result.error) {
+    chrome.storage.local.set({ 
+      lastResult: { text: result.result, isError: false, timestamp: Date.now() } 
+    });
+    renderResult({ text: result.result, isError: false });
+  } else {
+    const errMsg = result.error || '未识别到二维码';
+    chrome.storage.local.set({ 
+      lastResult: { text: errMsg, isError: true, timestamp: Date.now() } 
+    });
+    renderResult({ text: errMsg, isError: true });
+  }
+}
+
+async function continueDecode(dataUrl) {
+  try {
+    const result = await decodeWithBackground(dataUrl);
+    if (isDecoding) handleDecodeResult(result);
+  } catch (err) {
+    if (isDecoding && err.message !== '用户取消识别') {
+      handleDecodeResult({ result: null, error: err.message });
+    }
+  } finally {
+    await chrome.storage.local.remove('decodingState');
+  }
+}
+
+// ==================== 文件上传 ====================
+async function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('请选择图片文件');
+    elements.fileInput.value = '';
+    return;
+  }
+  
+  cancelCurrentDecode();
+  showLoading('正在解析图片...');
+  
+  try {
+    const dataUrl = await fileToDataURL(file);
+    await chrome.storage.local.set({
+      decodingState: { isDecoding: true, dataUrl, message: '正在解析图片...', timestamp: Date.now() }
+    });
+    const result = await decodeWithBackground(dataUrl);
+    if (isDecoding) handleDecodeResult(result);
+  } catch (err) {
+    if (isDecoding && err.message !== '用户取消识别') {
+      handleDecodeResult({ result: null, error: err.message });
+    }
+  } finally {
+    elements.fileInput.value = '';
+    await chrome.storage.local.remove('decodingState');
+  }
+}
+
+// ==================== 剪贴板 ====================
+async function handleClipboard() {
+  try {
+    showToast('正在检查剪贴板...');
+    
+    let clipboardItems;
+    try {
+      clipboardItems = await navigator.clipboard.read();
+    } catch (err) {
+      showToast(err.name === 'NotAllowedError' ? '需要剪贴板读取权限' : '读取剪贴板失败');
       return;
     }
     
-    // 取消之前的识别
-    cancelCurrentDecode();
+    let validImageBlob = null;
+    for (const item of clipboardItems) {
+      for (const type of item.types.filter(t => t.startsWith('image/'))) {
+        const blob = await item.getType(type);
+        if (blob && await validateImageBlob(blob)) {
+          validImageBlob = blob;
+          break;
+        }
+      }
+      if (validImageBlob) break;
+    }
+    
+    if (!validImageBlob) {
+      showToast('剪贴板中没有有效的图片');
+      return;
+    }
     
     showLoading('正在解析图片...');
-    
-    try {
-      const dataUrl = await fileToDataURL(file);
-      
-      // 保存状态到 storage
-      await chrome.storage.local.set({
-        decodingState: {
-          isDecoding: true,
-          dataUrl: dataUrl,
-          message: '正在解析图片...',
-          timestamp: Date.now()
-        }
-      });
-      
-      const result = await decodeWithBackground(dataUrl);
-      if (!isDecoding) {
-        return;
-      }
-      handleDecodeResult(result);
-    } catch (err) {
-      if (isDecoding && err.message !== '用户取消识别') {
-        handleDecodeResult({ result: null, error: err.message });
-      }
-    } finally {
-      fileInput.value = '';
-      clearCurrentDecode();
-    }
-  });
-  
-  // 读取剪贴板图片
-  btnClipboard.addEventListener('click', async () => {
-    try {
-      // 先显示提示
-      showToast('正在检查剪贴板...');
-      
-      // 检查剪贴板权限
-      let hasPermission = false;
-      try {
-        const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' });
-        hasPermission = permissionStatus.state === 'granted';
-      } catch (err) {
-        console.log('权限查询失败，尝试直接读取');
-      }
-      
-      let clipboardItems;
-      try {
-        clipboardItems = await navigator.clipboard.read();
-      } catch (err) {
-        if (err.name === 'NotAllowedError') {
-          showToast('需要剪贴板读取权限，请在浏览器设置中允许');
-        } else {
-          showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
-        }
-        return; // 不跳转到加载页面
-      }
-      
-      let imageFound = false;
-      let validImageBlob = null;
-      
-      
-      // 遍历剪贴板内容查找图片
-      for (const item of clipboardItems) {
-        const imageTypes = item.types.filter(type => type.startsWith('image/'));
-        
-        for (const type of imageTypes) {
-          try {
-            const blob = await item.getType(type);
-            if (blob && blob.type.startsWith('image/')) {
-              // 验证是否为有效图片
-              const isValid = await validateImageBlob(blob);
-              if (isValid) {
-                validImageBlob = blob;
-                imageFound = true;
-                break;
-              }
-            }
-          } catch (err) {
-            console.error('读取图片类型失败:', err);
-          }
-        }
-        if (imageFound) break;
-      }
-      
-      // 如果没有找到有效图片，不跳转到加载页面
-      if (!imageFound || !validImageBlob) {
-        showToast('剪贴板中没有有效的图片');
-        return; // 直接返回，不跳转
-      }
-      
-      // 确认是有效图片后，才跳转到加载页面
-      showLoading('正在解析图片...');
-      
-      // 取消之前的识别
-      cancelCurrentDecode();
-      
-      const dataUrl = await blobToDataURL(validImageBlob);
-      
-      // 保存状态到 storage
-      await chrome.storage.local.set({
-        decodingState: {
-          isDecoding: true,
-          dataUrl: dataUrl,
-          message: '正在解析图片...',
-          timestamp: Date.now()
-        }
-      });
-      
-      const result = await decodeWithBackground(dataUrl);
-      if (!isDecoding) {
-        return;
-      }
-      handleDecodeResult(result);
-      
-    } catch (err) {
-      console.error('读取剪贴板失败:', err);
-      // 发生错误时，如果已经在加载页面，返回操作页面
-      if (viewLoading.classList.contains('active')) {
-        showAction();
-      }
-      if (err.name === 'NotAllowedError') {
-        showToast('请先在浏览器设置中允许读取剪贴板权限');
-      } else if (err.message !== '用户取消识别') {
-        showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
-      }
-    } finally {
-      clearCurrentDecode();
-    }
-  });
-  
-  // 验证图片Blob是否有效
-  async function validateImageBlob(blob) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(blob);
-      
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        // 检查图片尺寸是否有效
-        if (img.width > 0 && img.height > 0) {
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      };
-      
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(false);
-      };
-      
-      img.src = url;
-      
-      // 设置超时
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        resolve(false);
-      }, 3000);
-    });
-  }
-  
-  // 取消识别
-  btnCancel.addEventListener('click', async () => {
     cancelCurrentDecode();
-    // 清除 storage 中的状态
+    
+    const dataUrl = await blobToDataURL(validImageBlob);
+    await chrome.storage.local.set({
+      decodingState: { isDecoding: true, dataUrl, message: '正在解析图片...', timestamp: Date.now() }
+    });
+    
+    const result = await decodeWithBackground(dataUrl);
+    if (isDecoding) handleDecodeResult(result);
+  } catch (err) {
+    if (elements.views.loading?.classList.contains('active')) showAction();
+    if (err.message !== '用户取消识别') showToast('读取剪贴板失败: ' + (err.message || '未知错误'));
+  } finally {
     await chrome.storage.local.remove('decodingState');
-    showToast('已取消识别');
-    showAction();
+  }
+}
+
+// ==================== 框选区域 ====================
+async function startAreaSelection() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return showToast('无法获取当前页面');
+    
+    const blockedUrls = ['chrome://', 'edge://', 'about:', 'chrome-extension://'];
+    if (blockedUrls.some(prefix => tab.url.startsWith(prefix))) {
+      return showToast('无法在浏览器内部页面使用框选功能\n请在其他网页上使用');
+    }
+    
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+    await chrome.tabs.sendMessage(tab.id, { action: 'startAreaSelection' });
+    window.close();
+  } catch (err) {
+    showToast('启动框选失败: ' + (err.message || '未知错误'));
+  }
+}
+
+// ==================== 工具函数 ====================
+function isURL(str) {
+  if (!str?.trim()) return false;
+  const trimmed = str.trim();
+  return /^(https?:\/\/|ftp:\/\/|file:\/\/|www\.)/i.test(trimmed) ||
+         /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/i.test(trimmed);
+}
+
+async function copyToClipboard(text) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('已复制到剪贴板');
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('已复制到剪贴板');
+  }
+}
+
+function openLink(url) {
+  let finalUrl = url;
+  if (!/^https?:\/\//i.test(url)) finalUrl = 'https://' + url;
+  chrome.tabs.create({ url: finalUrl });
+}
+
+function showToast(message) {
+  elements.toast.textContent = message;
+  elements.toast.classList.add('show');
+  setTimeout(() => elements.toast.classList.remove('show'), 1500);
+}
+
+function setBadge(text, color) {
+  chrome.action.setBadgeText({ text });
+  if (color) chrome.action.setBadgeBackgroundColor({ color });
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  
-  btnBack.addEventListener('click', async () => {
-    // 取消任何正在进行的识别
-    cancelCurrentDecode();
-    await chrome.storage.local.remove('decodingState');
-    chrome.storage.local.remove('lastResult');
-    showAction();
+}
+
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
   });
+}
 
-  function showAction() {
-    // 清理状态
-    cancelCurrentDecode();
-    
-    viewAction.classList.add('active');
-    viewLoading.classList.remove('active');
-    viewResult.classList.remove('active');
-    chrome.action.setBadgeText({ text: '' });
-  }
+function validateImageBlob(blob) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img.width > 0 && img.height > 0); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+    setTimeout(() => { URL.revokeObjectURL(url); resolve(false); }, 3000);
+  });
+}
 
-  function showLoading(message = '正在识别二维码...') {
-    viewAction.classList.remove('active');
-    viewLoading.classList.add('active');
-    viewResult.classList.remove('active');
-
-    chrome.action.setBadgeText({ text: '···' });
-    chrome.action.setBadgeBackgroundColor({ color: '#f7d22f' });
-
-    const loadingText = document.querySelector('.loading-text');
-    if (loadingText) {
-      loadingText.textContent = message;
-    }
-  }
-
-  function showResult(data) {
-    viewAction.classList.remove('active');
-    viewLoading.classList.remove('active');
-    viewResult.classList.add('active');
-    
-    // 清除 decoding state
-    chrome.storage.local.remove('decodingState');
-    
-    if (data.isError) {
-      resultIcon.textContent = '✗';
-      resultIcon.classList.add('error');
-      resultTitle.textContent = '识别失败';
-      resultCount.textContent = '';
-      resultList.innerHTML = `<div class="result-item">
-        <div class="result-item-content" style="color: #ff4d4f;">${escapeHtml(data.text)}</div>
-      </div>`;
-    } else {
-      resultIcon.textContent = '✓';
-      resultIcon.classList.remove('error');
-      resultTitle.textContent = '识别成功';
-      
-      // 处理多个结果
-      const results = Array.isArray(data.text) ? data.text : [data.text];
-      const validResults = results.filter(r => r && typeof r === 'string' && r.trim() !== '');
-      
-      resultCount.textContent = `共 ${validResults.length} 个结果`;
-      
-      if (validResults.length === 0) {
-        resultList.innerHTML = `<div class="result-item">
-          <div class="result-item-content" style="color: #ff4d4f;">未识别到有效内容</div>
-        </div>`;
-      } else {
-        resultList.innerHTML = validResults.map((content, index) => `
-          <div class="result-item" data-index="${index}">
-            <div class="result-item-content">${escapeHtml(content)}</div>
-            <div class="result-item-actions">
-              <button class="item-btn item-btn-copy" data-content="${escapeAttr(content)}">📋 复制</button>
-              ${isURL(content) ? `<button class="item-btn item-btn-open" data-url="${escapeAttr(content)}">🔗 打开链接</button>` : ''}
-            </div>
-          </div>
-        `).join('');
-        
-        // 绑定每个结果项的按钮事件
-        document.querySelectorAll('.result-item').forEach((item, idx) => {
-          const copyBtn = item.querySelector('.item-btn-copy');
-          const openBtn = item.querySelector('.item-btn-open');
-          const content = validResults[idx];
-          
-          if (copyBtn) {
-            copyBtn.addEventListener('click', () => copyToClipboard(content));
-          }
-          if (openBtn) {
-            openBtn.addEventListener('click', () => openLink(content));
-          }
-        });
-      }
-    }
-    
-  }
-
-  function isURL(str) {
-    if (!str || typeof str !== 'string') return false;
-    const trimmed = str.trim();
-    return /^(https?:\/\/|ftp:\/\/|file:\/\/|www\.)[^\s]+$/i.test(trimmed) || 
-           /^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}(:[0-9]{1,5})?(\/.*)?$/i.test(trimmed);
-  }
-
-  // 调用 background 进行解析
-  async function decodeWithBackground(dataUrl) {
-    return new Promise((resolve, reject) => {
-      // 创建 AbortController 用于取消请求
-      currentAbortController = new AbortController();
-      isDecoding = true;
-      
-      // 设置超时
-      const timeoutId = setTimeout(() => {
-        if (currentAbortController) {
-          currentAbortController.abort();
-          reject(new Error('识别超时（30秒）'));
-        }
-      }, 30000);
-      
-      // 发送消息到 background
-      chrome.runtime.sendMessage({ 
-        action: 'decodeImage', 
-        dataUrl: dataUrl
-      }, (response) => {
-        clearTimeout(timeoutId);
-        
-        if (!isDecoding) {
-          reject(new Error('用户取消识别'));
-          return;
-        }
-        
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-      
-      // 监听取消信号
-      currentAbortController.signal.addEventListener('abort', () => {
-        clearTimeout(timeoutId);
-        isDecoding = false;
-        reject(new Error('用户取消识别'));
-      });
-    });
-  }
-
-  function cancelCurrentDecode() {
-    if (currentAbortController) {
-      currentAbortController.abort();
-      currentAbortController = null;
-    }
-    isDecoding = false;
-    currentDecodePromise = null;
-  }
-
-  function clearCurrentDecode() {
-    currentAbortController = null;
-    isDecoding = false;
-    currentDecodePromise = null;
-    // 清除 storage 中的解码状态
-    chrome.storage.local.remove('decodingState');
-  }
-
-  function handleDecodeResult(result) {
-    if (!isDecoding) return;
-    
-    if (result.result && !result.error) {
-      // 将结果存入 storage
-      chrome.storage.local.set({
-        lastResult: {
-          text: result.result,
-          isError: false,
-          timestamp: Date.now()
-        }
-      });
-      showResult({ text: result.result, isError: false });
-    } else {
-      const errMsg = result.error || '未识别到二维码';
-      chrome.storage.local.set({
-        lastResult: {
-          text: errMsg,
-          isError: true,
-          timestamp: Date.now()
-        }
-      });
-      showResult({ text: errMsg, isError: true });
-    }
-  }
-
-  async function copyToClipboard(text) {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('已复制到剪贴板');
-    } catch (err) {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      showToast('已复制到剪贴板');
-    }
-  }
-
-  function openLink(url) {
-    if (!url) return;
-    let finalUrl = url;
-    if (!/^https?:\/\//i.test(url) && !/^ftp:\/\//i.test(url)) {
-      finalUrl = 'https://' + url;
-    }
-    chrome.tabs.create({ url: finalUrl });
-  }
-
-  function showToast(message) {
-    // 检查是否包含换行符
-    const hasNewline = message.includes('\n');
-    
-    toast.textContent = message;
-    
-    // 如果有换行符，添加 multiline 类
-    if (hasNewline) {
-      toast.classList.add('multiline');
-    } else {
-      toast.classList.remove('multiline');
-    }
-    
-    toast.classList.add('show');
-    setTimeout(() => {
-      toast.classList.remove('show');
-      toast.classList.remove('multiline');
-    }, 1500);
-  }
-
-  function fileToDataURL(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function blobToDataURL(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function escapeAttr(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-});
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+}

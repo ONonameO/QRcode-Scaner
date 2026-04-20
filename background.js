@@ -182,7 +182,17 @@ async function clearDecodingState() {
 }
 
 // ==================== 结果存储 ====================
+// 在文件开头添加
+let expireTimer = null;
+
+// 修改 saveResult 函数
 async function saveResult({ result, error }) {
+  // 清除之前的过期定时器
+  if (expireTimer) {
+    clearTimeout(expireTimer);
+    expireTimer = null;
+  }
+  
   const isSuccess = result && !error;
   
   if (isSuccess) {
@@ -237,6 +247,25 @@ function dataURLtoBlob(dataUrl) {
 }
 
 // ==================== 结果过期清理 ====================
+// 检查结果是否过期并清除角标
+async function checkAndClearExpiredResult() {
+  const { lastResult } = await chrome.storage.local.get('lastResult');
+  
+  if (lastResult && (Date.now() - lastResult.timestamp >= 300000)) { // 5分钟 = 300000毫秒
+    // 结果已过期，清除存储和角标
+    await chrome.storage.local.remove('lastResult');
+    chrome.action.setBadgeText({ text: '' });
+    console.log('[QR] 识别结果已过期，角标已清除');
+  }
+}
+
+// 启动定时检查（每30秒检查一次）
+setInterval(() => {
+  checkAndClearExpiredResult();
+}, 30000); // 30秒检查一次
+
+// 扩展启动时立即检查一次
+checkAndClearExpiredResult();
 
 // 监听 storage 变化，当 lastResult 被设置时，设置一个定时器在过期时清除
 chrome.storage.onChanged.addListener((changes, areaName) => {

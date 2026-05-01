@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QRcode Scaner（二维码识别器）",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "使用草料二维码API解析二维码（需联网），基本能识别通用二维码和市面上大部分APP专属二维码。支持右键菜单识别、网页截图识别、上传本地图片识别和从剪切板识别。",
   "permissions": [
     "contextMenus",

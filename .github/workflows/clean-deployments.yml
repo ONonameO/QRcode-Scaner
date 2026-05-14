@@ -1,0 +1,24 @@
+name: 清理旧的部署记录
+
+on:
+  # 当有新的 page_build 完成时触发，正好满足你“只在 index.html 变更后清理”的想法
+  page_build:
+  # 同时允许手动触发，方便维护
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      # 需要写权限来删除环境和部署
+      deployments: write
+    steps:
+      - name: 删除 github-pages 环境下的所有部署
+        uses: strumwolf/delete-deployment-environment@v2
+        with:
+          # 使用 GitHub 自动提供的 token，无需你自己配置
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 指定要清理的环境名称，GitHub Pages 的环境就是 'github-pages'
+          environment: github-pages
+          # 这个参数设为 true 表示只删除部署记录，但保留环境本身
+          onlyRemoveDeployments: true

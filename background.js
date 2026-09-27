@@ -74,8 +74,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return false; // 未处理的 action 不占用消息通道，避免拦截本应发往 offscreen 的消息
 });
 
-// ==================== 解码模式与本地离线解码 ====================
-// 解码模式：'auto'(默认，本地优先失败回退草料) / 'local'(仅本地) / 'online'(仅草料)
+// ==================== 识别模式与本地离线解码 ====================
+// 识别模式：'auto'(默认，本地优先失败回退草料) / 'local'(仅本地) / 'online'(仅草料)
 async function getDecodeMode() {
   const { decodeMode } = await chrome.storage.local.get('decodeMode');
   return decodeMode === 'local' || decodeMode === 'online' ? decodeMode : 'auto';
@@ -137,7 +137,7 @@ async function decodeWithFallback(dataUrl) {
 
   // 仅本地模式：本地失败即报错，不再回退
   if (mode === 'local') {
-    return { result: null, error: '本地识别失败（当前为仅本地模式）', source: 'local' };
+    return { result: null, error: '本地识别失败', source: 'local' };
   }
 
   // 自动模式：本地失败 -> 回退草料 API

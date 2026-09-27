@@ -1,7 +1,7 @@
 // ==================== DOM 元素 ====================
 const DOM = {
   views: { action: 'view-action', loading: 'view-loading', result: 'view-result' },
-  result: { icon: 'result-icon', title: 'result-title', count: 'result-count', source: 'result-source', list: 'result-list' },
+  result: { icon: 'result-icon', title: 'result-title', count: 'result-count', list: 'result-list' },
   btns: { area: 'btn-area', file: 'btn-file', clipboard: 'btn-clipboard', cancel: 'btn-cancel', back: 'btn-back' },
   fileInput: 'file-input',
   toast: 'toast'
@@ -74,50 +74,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   elements.btns.back?.addEventListener('click', backToAction);
   elements.fileInput?.addEventListener('change', handleFileUpload);
 
-  // 解码模式开关
-  elements.modeGroup = document.getElementById('mode-group');
+  // 识别模式开关（下拉选择框）
+  elements.modeSelect = document.getElementById('mode-select');
   await initDecodeMode();
-  elements.modeGroup?.addEventListener('click', onModeClick);
+  elements.modeSelect?.addEventListener('change', onModeChange);
 });
 
-// ==================== 解码模式开关 ====================
+// ==================== 识别模式开关（下拉选择框） ====================
 async function initDecodeMode() {
   const { decodeMode } = await chrome.storage.local.get('decodeMode');
   setActiveMode(decodeMode === 'local' || decodeMode === 'online' ? decodeMode : 'auto');
 }
 
 function setActiveMode(mode) {
-  if (!elements.modeGroup) return;
-  elements.modeGroup.querySelectorAll('.mode-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
+  if (!elements.modeSelect) return;
+  elements.modeSelect.value = mode;
 }
 
-async function onModeClick(e) {
-  const btn = e.target.closest('.mode-btn');
-  if (!btn) return;
-  const mode = btn.dataset.mode;
+async function onModeChange(e) {
+  const mode = e.target.value;
   await chrome.storage.local.set({ decodeMode: mode });
-  setActiveMode(mode);
-  showToast(mode === 'local' ? '已切换为：仅本地（完全离线）'
-    : mode === 'online' ? '已切换为：仅在线（草料 API）'
-    : '已切换为：自动（本地优先）');
-}
-
-// 在结果头部显示来源标签
-function setSourceTag(source) {
-  const el = elements.result.source;
-  if (!el) return;
-  if (source === 'local') {
-    el.textContent = '本地识别';
-    el.className = 'result-source local';
-  } else if (source === 'api') {
-    el.textContent = '在线识别（草料）';
-    el.className = 'result-source api';
-  } else {
-    el.textContent = '';
-    el.className = 'result-source';
-  }
 }
 
 // ==================== 视图控制 ====================
@@ -141,7 +117,6 @@ function showAction() {
 // ==================== 统一结果渲染 ====================
 function renderResult(data) {
   showView('result');
-  setSourceTag(data.source);
 
   // 识别失败
   if (data.isError) {

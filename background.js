@@ -1,17 +1,43 @@
 const CAOLIAO_API = 'https://api.2dcode.biz/v1/read-qr-code';
 
 // ==================== 初始化 ====================
-async function setupOffscreen() {
+// 每次修改 offscreen 相关逻辑（offscreen.js / qr-decoder.js / libs）后请把此版本号 +1，
+// 以便扩展重载后强制重建 offscreen，避免使用陈旧（旧代码）的 offscreen 实例。
+const OFFSCREEN_VERSION = 2;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 确保 offscreen 文档存在且为最新版本；版本不符则先关闭再重建
+async function ensureOffscreen() {
   try {
-    const existing = await chrome.offscreen.hasDocument?.() || false;
-    if (existing) return;
+    const has = await chrome.offscreen.hasDocument?.() || false;
+    if (has) {
+      const { offscreenVersion } = await chrome.storage.local.get('offscreenVersion');
+      if (offscreenVersion === OFFSCREEN_VERSION) return;
+      await chrome.offscreen.closeDocument?.();
+    }
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
-      reasons: ['DOM_PARSER', 'IFRAME_SCRIPTING'],
-      justification: '需要在 DOM 环境中裁剪图片'
+      reasons: ['DOM_PARSER', 'IFRAME_SCRIPTING', 'BLOBS'],
+      justification: '需要在 DOM 环境中裁剪图片，并用 Canvas + zxing-wasm 做本地离线解码'
     });
+    await chrome.storage.local.set({ offscreenVersion: OFFSCREEN_VERSION });
   } catch (e) {
-    console.log('[QR] Offscreen Document 已存在');
+    console.warn('[QR] 创建 Offscreen Document 失败', e);
+  }
+}
+
+// 强制关闭并重建 offscreen（用于本地解码无响应时自愈）
+async function recreateOffscreen() {
+  try { await chrome.offscreen.closeDocument?.(); } catch (_) {}
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['DOM_PARSER', 'IFRAME_SCRIPTING', 'BLOBS'],
+      justification: '需要在 DOM 环境中裁剪图片，并用 Canvas + zxing-wasm 做本地离线解码'
+    });
+    await chrome.storage.local.set({ offscreenVersion: OFFSCREEN_VERSION });
+  } catch (e) {
+    console.warn('[QR] 重建 Offscreen Document 失败', e);
   }
 }
 
@@ -21,9 +47,9 @@ chrome.runtime.onInstalled.addListener(() => {
     title: '识别二维码',
     contexts: ['image']
   });
-  setupOffscreen();
+  ensureOffscreen();
 });
-setupOffscreen();
+ensureOffscreen();
 
 function setBadge(text, color) {
   chrome.action.setBadgeText({ text });
@@ -38,15 +64,87 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
     case 'decodeImage':
-      decodeWithCaoliaoAPI(request.dataUrl)
+      decodeWithFallback(request.dataUrl)
         .then(result => sendResponse(result))
         .catch(err => sendResponse({ result: null, error: err.message }));
       return true;
     case 'cropImage':
       return false;
   }
-  return true;
+  return false; // 未处理的 action 不占用消息通道，避免拦截本应发往 offscreen 的消息
 });
+
+// ==================== 解码模式与本地离线解码 ====================
+// 解码模式：'auto'(默认，本地优先失败回退草料) / 'local'(仅本地) / 'online'(仅草料)
+async function getDecodeMode() {
+  const { decodeMode } = await chrome.storage.local.get('decodeMode');
+  return decodeMode === 'local' || decodeMode === 'online' ? decodeMode : 'auto';
+}
+
+// 本地离线解码（background -> offscreen 桥接）。
+// 防 offscreen 尚未就绪：首次失败重试一次；若仍无响应（offscreen 陈旧/未加载），
+// 强制重建 offscreen 后再试一次（自愈）。
+async function decodeOffline(dataUrl) {
+  await ensureOffscreen();
+  const attempt = () => new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ action: 'decodeOffline', dataUrl }, (resp) => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(resp); // 若无任何监听者响应，resp 为 undefined
+    });
+  });
+
+  let resp;
+  try {
+    resp = await attempt();
+  } catch (e) {
+    await sleep(500);
+    resp = await attempt();
+  }
+
+  // 完全无响应：offscreen 可能陈旧或未就绪 → 重建后重试一次
+  if (!resp) {
+    console.warn('[QR] offscreen 无响应，尝试重建后重试');
+    await recreateOffscreen();
+    await sleep(600);
+    try { resp = await attempt(); } catch (e) { console.warn('[QR] 重建后重试仍失败', e); }
+  }
+
+  if (!resp) throw new Error('offscreen 无响应（已尝试重建）');
+  if (resp.error) throw new Error(resp.error);
+  return resp.texts || [];
+}
+
+// 统一解码入口：本地优先，按模式决定是否回退草料 API
+async function decodeWithFallback(dataUrl) {
+  const mode = await getDecodeMode();
+
+  // 仅在线：直接走草料 API
+  if (mode === 'online') {
+    const r = await decodeWithCaoliaoAPI(dataUrl);
+    r.source = 'api';
+    return r;
+  }
+
+  // 仅本地 / 自动：先本地离线解码
+  try {
+    const local = await decodeOffline(dataUrl);
+    if (local.length > 0) {
+      return { result: local, error: null, source: 'local' };
+    }
+  } catch (e) {
+    console.warn('[QR] 本地离线解码异常，准备回退', e);
+  }
+
+  // 仅本地模式：本地失败即报错，不再回退
+  if (mode === 'local') {
+    return { result: null, error: '本地识别失败（当前为仅本地模式）', source: 'local' };
+  }
+
+  // 自动模式：本地失败 -> 回退草料 API
+  const r = await decodeWithCaoliaoAPI(dataUrl);
+  r.source = 'api';
+  return r;
+}
 
 // 右键菜单识别
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -67,8 +165,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     // 4. 更新解码状态中的 dataUrl
     await updateDecodingStateDataUrl(dataUrl);
     
-    // 5. 调用 API 识别
-    const result = await decodeWithCaoliaoAPI(dataUrl);
+    // 5. 调用解码（本地优先，失败回退草料）
+    const result = await decodeWithFallback(dataUrl);
     saveResult(result);
   } catch (err) {
     saveResult({ result: null, error: err.message });
@@ -91,7 +189,7 @@ async function handleCapture(area) {
     
     // 4. 裁剪图片（如果需要）
     if (area && area.width > 0 && area.height > 0) {
-      await setupOffscreen();
+      await ensureOffscreen();
       const cropResult = await new Promise((resolve) => {
         chrome.runtime.sendMessage({
           action: 'cropImage',
@@ -105,8 +203,8 @@ async function handleCapture(area) {
     // 5. 更新解码状态中的 dataUrl
     await updateDecodingStateDataUrl(finalDataUrl);
     
-    // 6. 调用 API 识别
-    const result = await decodeWithCaoliaoAPI(finalDataUrl);
+    // 6. 调用解码（本地优先，失败回退草料）
+    const result = await decodeWithFallback(finalDataUrl);
     saveResult(result);
   } catch (err) {
     saveResult({ result: null, error: err.message });
@@ -186,7 +284,7 @@ async function clearDecodingState() {
 let expireTimer = null;
 
 // 修改 saveResult 函数
-async function saveResult({ result, error }) {
+async function saveResult({ result, error, source }) {
   // 清除之前的过期定时器
   if (expireTimer) {
     clearTimeout(expireTimer);
@@ -200,12 +298,12 @@ async function saveResult({ result, error }) {
       .filter(r => r && typeof r === 'string' && r.trim() !== '');
     
     if (validResults.length === 0) {
-      await storeResult('未识别到有效内容', true);
+      await storeResult('未识别到有效内容', true, source);
     } else {
-      await storeResult(validResults, false);
+      await storeResult(validResults, false, source);
     }
   } else {
-    await storeResult(error || '未识别到二维码', true);
+    await storeResult(error || '未识别到二维码', true, source);
   }
   
   // 清除解码状态
@@ -216,9 +314,9 @@ async function saveResult({ result, error }) {
   chrome.storage.local.get('lastResult', () => {});
 }
 
-async function storeResult(text, isError) {
+async function storeResult(text, isError, source) {
   await chrome.storage.local.set({
-    lastResult: { text, isError, timestamp: Date.now() }
+    lastResult: { text, isError, source: source || 'api', timestamp: Date.now() }
   });
 }
 

@@ -1,7 +1,7 @@
 // ==================== DOM 元素 ====================
 const DOM = {
   views: { action: 'view-action', loading: 'view-loading', result: 'view-result' },
-  result: { icon: 'result-icon', title: 'result-title', count: 'result-count', list: 'result-list' },
+  result: { icon: 'result-icon', title: 'result-title', count: 'result-count', source: 'result-source', list: 'result-list' },
   btns: { area: 'btn-area', file: 'btn-file', clipboard: 'btn-clipboard', cancel: 'btn-cancel', back: 'btn-back' },
   fileInput: 'file-input',
   toast: 'toast'
@@ -73,7 +73,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   elements.btns.cancel?.addEventListener('click', cancelDecode);
   elements.btns.back?.addEventListener('click', backToAction);
   elements.fileInput?.addEventListener('change', handleFileUpload);
+
+  // 解码模式开关
+  elements.modeGroup = document.getElementById('mode-group');
+  await initDecodeMode();
+  elements.modeGroup?.addEventListener('click', onModeClick);
 });
+
+// ==================== 解码模式开关 ====================
+async function initDecodeMode() {
+  const { decodeMode } = await chrome.storage.local.get('decodeMode');
+  setActiveMode(decodeMode === 'local' || decodeMode === 'online' ? decodeMode : 'auto');
+}
+
+function setActiveMode(mode) {
+  if (!elements.modeGroup) return;
+  elements.modeGroup.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
+
+async function onModeClick(e) {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  const mode = btn.dataset.mode;
+  await chrome.storage.local.set({ decodeMode: mode });
+  setActiveMode(mode);
+  showToast(mode === 'local' ? '已切换为：仅本地（完全离线）'
+    : mode === 'online' ? '已切换为：仅在线（草料 API）'
+    : '已切换为：自动（本地优先）');
+}
+
+// 在结果头部显示来源标签
+function setSourceTag(source) {
+  const el = elements.result.source;
+  if (!el) return;
+  if (source === 'local') {
+    el.textContent = '本地识别';
+    el.className = 'result-source local';
+  } else if (source === 'api') {
+    el.textContent = '在线识别（草料）';
+    el.className = 'result-source api';
+  } else {
+    el.textContent = '';
+    el.className = 'result-source';
+  }
+}
 
 // ==================== 视图控制 ====================
 function showView(viewName) {
@@ -96,7 +141,8 @@ function showAction() {
 // ==================== 统一结果渲染 ====================
 function renderResult(data) {
   showView('result');
-  
+  setSourceTag(data.source);
+
   // 识别失败
   if (data.isError) {
     setBadge('! ', '#ff4d4f');
@@ -201,18 +247,19 @@ async function backToAction() {
 
 function handleDecodeResult(result) {
   if (!isDecoding) return;
+  const source = result.source || 'api';
   
   if (result.result && !result.error) {
     chrome.storage.local.set({ 
-      lastResult: { text: result.result, isError: false, timestamp: Date.now() } 
+      lastResult: { text: result.result, isError: false, source, timestamp: Date.now() } 
     });
-    renderResult({ text: result.result, isError: false });
+    renderResult({ text: result.result, isError: false, source });
   } else {
     const errMsg = result.error || '未识别到二维码';
     chrome.storage.local.set({ 
-      lastResult: { text: errMsg, isError: true, timestamp: Date.now() } 
+      lastResult: { text: errMsg, isError: true, source, timestamp: Date.now() } 
     });
-    renderResult({ text: errMsg, isError: true });
+    renderResult({ text: errMsg, isError: true, source });
   }
 }
 

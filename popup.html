@@ -31,6 +31,17 @@
       💡 提示：框选识别需要拖拽鼠标<br>选择二维码区域，按 ESC 取消
     </div>
 
+    <!-- 解码模式 -->
+    <div class="mode-row">
+      <span class="mode-label">解码模式</span>
+      <div class="mode-group" id="mode-group">
+        <button class="mode-btn" data-mode="auto">自动</button>
+        <button class="mode-btn" data-mode="local">仅本地</button>
+        <button class="mode-btn" data-mode="online">仅在线</button>
+      </div>
+    </div>
+    <div class="mode-hint">自动：本地优先，失败回退草料 · 仅本地：完全离线 · 仅在线：只用草料 API</div>
+
   </div>
 
   <!-- 加载视图 -->
@@ -49,6 +60,7 @@
       <div class="result-icon" id="result-icon">✓</div>
       <span class="result-title" id="result-title">识别成功</span>
       <span class="result-count" id="result-count"></span>
+      <span class="result-source" id="result-source"></span>
     </div>
     <div class="result-list" id="result-list"></div>
     <div class="footer-actions">

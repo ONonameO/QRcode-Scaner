@@ -86,8 +86,15 @@
         <li>识别结果仅显示在扩展弹窗中</li>
     </ul>
 
-    <h2>第三方服务</h2>
-    <p>本扩展使用草料二维码API（<a href="https://api.2dcode.biz/v1/read-qr-code">https://api.2dcode.biz/v1/read-qr-code</a>）进行二维码识别。您的图片数据会被发送至该API服务器进行解析。请参阅<a href="https://cli.im/open-api/qrcode-api/read-qr-code.html">草料二维码解码API</a>了解其数据处理方式。</p>
+    <h2>本地解码与第三方服务</h2>
+    <p>本扩展<strong>优先在本地离线解码</strong>二维码：内置 zxing-wasm 引擎在你的设备上完成识别，图片不会离开本机。</p>
+    <p>仅在以下情况，图片才会被发送至第三方服务器：</p>
+    <ul>
+        <li><strong>自动模式</strong>（默认）：本地解码失败时，作为兜底回退，图片会发送至草料二维码 API。</li>
+        <li><strong>仅在线模式</strong>：你主动选择始终使用草料二维码 API。</li>
+    </ul>
+    <p>若你选择<strong>仅本地模式</strong>，图片<strong>绝不会</strong>上传到任何服务器。</p>
+    <p>草料二维码API地址：<a href="https://api.2dcode.biz/v1/read-qr-code">https://api.2dcode.biz/v1/read-qr-code</a>。请参阅<a href="https://cli.im/open-api/qrcode-api/read-qr-code.html">草料二维码解码API</a>了解其数据处理方式。</p>
 
     <h2>数据存储</h2>
     <ul>

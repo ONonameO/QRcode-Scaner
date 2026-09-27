@@ -358,3 +358,77 @@ h3 {
 #file-input {
   display: none;
 }
+
+/* 解码模式开关 */
+.mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #f1f1f3;
+  border-radius: 8px;
+}
+
+.mode-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #444;
+}
+
+.mode-group {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  padding: 6px 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 6px;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:hover {
+  border-color: #07c160;
+  color: #07c160;
+}
+
+.mode-btn.active {
+  background: #07c160;
+  border-color: #07c160;
+  color: #fff;
+}
+
+.mode-hint {
+  font-size: 12px;
+  font-weight: bold;
+  color: #999;
+  margin-top: 8px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 结果来源标签 */
+.result-source {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.result-source.local {
+  background: #e6f7ee;
+  color: #07c160;
+}
+
+.result-source.api {
+  background: #e6f0fb;
+  color: #1677ff;
+}

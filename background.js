@@ -42,10 +42,31 @@ async function recreateOffscreen() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'decodeQR',
-    title: '识别二维码',
-    contexts: ['image']
+  // 先清理旧菜单，避免扩展更新后重复 id 报错；再重建「父级 + 三种识别模式」右键菜单
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'decodeQR',
+      title: '识别二维码',
+      contexts: ['image']
+    });
+    chrome.contextMenus.create({
+      id: 'decodeQR_auto',
+      parentId: 'decodeQR',
+      title: '自动',
+      contexts: ['image']
+    });
+    chrome.contextMenus.create({
+      id: 'decodeQR_local',
+      parentId: 'decodeQR',
+      title: '本地识别',
+      contexts: ['image']
+    });
+    chrome.contextMenus.create({
+      id: 'decodeQR_online',
+      parentId: 'decodeQR',
+      title: '在线识别',
+      contexts: ['image']
+    });
   });
   ensureOffscreen();
 });
@@ -114,9 +135,10 @@ async function decodeOffline(dataUrl) {
   return resp.texts || [];
 }
 
-// 统一解码入口：本地优先，按模式决定是否回退草料 API
-async function decodeWithFallback(dataUrl) {
-  const mode = await getDecodeMode();
+// 统一解码入口：本地优先，按模式决定是否回退草料 API。
+// modeOverride 存在时（右键菜单指定）优先使用，否则读取存储的默认模式。
+async function decodeWithFallback(dataUrl, modeOverride) {
+  const mode = modeOverride || await getDecodeMode();
 
   // 仅在线：直接走草料 API
   if (mode === 'online') {
@@ -146,27 +168,34 @@ async function decodeWithFallback(dataUrl) {
   return r;
 }
 
-// 右键菜单识别
+// 右键菜单识别（支持从菜单直接选择识别模式）
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  // 只处理本扩展的二维码识别菜单
+  if (typeof info.menuItemId !== 'string' || !info.menuItemId.startsWith('decodeQR')) return;
+
+  // 菜单项 id → 识别模式（父级被点击时回退到存储的默认模式）
+  const modeMap = { decodeQR_auto: 'auto', decodeQR_local: 'local', decodeQR_online: 'online' };
+  const mode = modeMap[info.menuItemId] || null;
+
   try {
     // 1. 先保存解码状态（让 popup 知道正在识别）
     await saveDecodingState(null, '正在识别二维码...');
-    
+
     // 2. 立即打开 popup 显示加载页面
     chrome.action.openPopup();
     setBadge('···', '#f7d22f');
-    
+
     // 3. 获取图片数据
     let dataUrl = info.srcUrl;
-    if (!dataUrl.startsWith('data:')) {
+    if (!dataUrl || !dataUrl.startsWith('data:')) {
       dataUrl = await fetchImageAsDataURL(info.srcUrl);
     }
-    
+
     // 4. 更新解码状态中的 dataUrl
     await updateDecodingStateDataUrl(dataUrl);
-    
-    // 5. 调用解码（本地优先，失败回退草料）
-    const result = await decodeWithFallback(dataUrl);
+
+    // 5. 调用解码（按所选模式，本地优先失败回退草料）
+    const result = await decodeWithFallback(dataUrl, mode);
     saveResult(result);
   } catch (err) {
     saveResult({ result: null, error: err.message });

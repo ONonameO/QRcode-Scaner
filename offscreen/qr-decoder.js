@@ -1,8 +1,9 @@
 // 本地离线二维码解码模块（运行于 offscreen document）
-// 替代 decode.mjs 中的 sharp 预处理：使用 Canvas 做灰度 / 最近邻放大 / 二值化，
+// 使用 Canvas 做灰度 / 最近邻放大 / 二值化，
 // 再用 zxing-wasm 解码。wasm 由扩展自托管，通过 wasmBinary 注入，完全离线、不依赖 CDN。
+// 注意：dataURLToBlob 已统一到 shared/utils.js，本模块不再自行实现。
 
-import { readBarcodesFromImageFile } from './libs/reader/index.js';
+import { readBarcodesFromImageFile } from '../libs/reader/index.js';
 
 let wasmCache = null;
 
@@ -15,16 +16,6 @@ async function loadWasm() {
   const buf = await resp.arrayBuffer();
   wasmCache = new Uint8Array(buf);
   return wasmCache;
-}
-
-// dataURL -> Blob
-function dataURLToBlob(dataUrl) {
-  const [head, b64] = dataUrl.split(',');
-  const mime = (head.match(/:(.*?);/) || [])[1] || 'image/png';
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
 }
 
 // 加载图片为 Image 对象
@@ -52,14 +43,13 @@ async function preprocessViaCanvas(blob) {
     canvas.height = Math.max(1, Math.round(img.height * scale));
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false; // 最近邻，保留硬边缘
-    ctx.drawImage(img, 0,0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     const src = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const out = ctx.createImageData(canvas.width, canvas.height);
     for (let i = 0; i < src.data.length; i += 4) {
       const lum = 0.299 * src.data[i] + 0.587 * src.data[i + 1] + 0.114 * src.data[i + 2];
-      // 全局阈值二值化（注意：不能用 lum === 0，真实截图/照片的暗模块很少恰好为 0，
-      // 会导致二维码被整体置白而无法识别）。128 为标准阈值，适配绝大多数浅底二维码。
+      // 全局阈值二值化
       const v = lum < 1 ? 0 : 255;
       out.data[i] = out.data[i + 1] = out.data[i + 2] = v;
       out.data[i + 3] = 255;
@@ -96,6 +86,3 @@ export async function decodeOffline(blob) {
   }
   return texts;
 }
-
-// 供 offscreen.js 直接使用
-export { dataURLToBlob };

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "QRcode Scaner（二维码识别器）",
-  "version": "1.0.1",
-  "description": "本地离线优先的二维码识别器：默认使用内置 zxing-wasm 在本地离线解码，仅在本地失败时回退草料二维码API。可切换「仅本地/自动/仅在线」三种模式。基本能识别通用二维码和市面上大部分APP专属二维码。支持右键菜单识别、网页截图识别、上传本地图片识别和从剪切板识别。",
+  "version": "2.0.0",
+  "description": "QRcode Scaner（二维码识别器）是一款功能全面的二维码解析工具，支持识别市面上几乎所有类型的二维码，包括百度网盘、夸克网盘等国内网盘的二维码。",
   "permissions": [
     "contextMenus",
     "activeTab",
@@ -17,10 +17,11 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background/index.js",
+    "type": "module"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/popup.html",
     "default_icon": {
       "32": "icons/icon32.png",
       "64": "icons/icon64.png",
@@ -36,15 +37,14 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["offscreen.html", "offscreen.js"],
+      "resources": ["offscreen/offscreen.html", "offscreen/offscreen.js"],
       "matches": ["<all_urls>"]
     },
     {
       "resources": [
         "libs/zxing_reader.wasm",
         "libs/reader/index.js",
-        "libs/share.js",
-        "qr-decoder.js"
+        "libs/share.js"
       ],
       "matches": ["<all_urls>"]
     }

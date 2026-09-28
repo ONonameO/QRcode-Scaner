@@ -6,12 +6,12 @@
     <title>隐私策略 - QRcode Scaner（二维码识别器）</title>
     <style>
         body {
-            /* font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; */
-            line-height: 1.6;
-            max-width: 900px;
+            line-height: 1.7;
+            max-width: 920px;
             margin: 0 auto;
-            padding: 20px;
-            color: #333;
+            padding: 24px;
+            color: #2b2b2b;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
         }
         h1 {
             color: #07c160;
@@ -19,32 +19,59 @@
             padding-bottom: 10px;
         }
         h2 {
-            color: #555;
-            margin-top: 30px;
+            color: #1f1f1f;
+            margin-top: 34px;
             border-left: 4px solid #07c160;
-            padding-left: 15px;
+            padding-left: 14px;
         }
         h3 {
-            color: #666;
-            margin-top: 20px;
+            color: #444;
+            margin-top: 22px;
         }
+        p { margin: 12px 0; }
         .update-date {
             color: #888;
             font-size: 14px;
-            margin-bottom: 30px;
+            margin-bottom: 28px;
         }
-        ul {
-            padding-left: 25px;
-        }
-        li {
-            margin: 8px 0;
-        }
+        ul { padding-left: 24px; }
+        li { margin: 8px 0; }
         .highlight {
             background: #f5f5f5;
             padding: 2px 6px;
             border-radius: 4px;
             font-family: monospace;
             font-size: 14px;
+        }
+        .perm-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 15px;
+        }
+        .perm-table th, .perm-table td {
+            border: 1px solid #e3e3e3;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .perm-table th {
+            background: #f0faf4;
+            color: #1f1f1f;
+            font-weight: 600;
+        }
+        .perm-table td:first-child {
+            white-space: nowrap;
+            font-family: monospace;
+            color: #0a6b3a;
+            font-weight: 600;
+        }
+        .note {
+            background: #f7fbf9;
+            border: 1px solid #cdeedb;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin: 16px 0;
         }
         hr {
             border: none;
@@ -59,71 +86,102 @@
             padding-top: 20px;
             border-top: 1px solid #eee;
         }
+        a { color: #07c160; }
     </style>
 </head>
 <body>
-    <h1>📷 QRcode Scaner（二维码识别器） - 隐私策略</h1>
-    <div class="update-date">更新日期：2026年4月20日</div>
+    <h1>隐私策略 · 📷 QRcode Scaner（二维码识别器）</h1>
+    <div class="update-date">更新日期：2026年9月28日</div>
 
-    <h2>概述</h2>
-    <p>本扩展《QRcode Scaner（二维码识别器）》致力于保护用户隐私。</p>
-    <p>本隐私策略说明我们如何处理您的信息。</p>
+    <h2>一、概述</h2>
+    <p>《QRcode Scaner（二维码识别器）》是一款用于在本地或按需联网识别二维码内容的浏览器扩展。</p>
+    <p>本隐私策略依据 Microsoft Edge 扩展商店的合规要求编写，清楚说明本扩展所请求的权限及其用途、我们如何处理您的数据，以及是否及如何与第三方共享数据。如您对本策略有任何疑问，可通过文末联系方式与我们沟通。</p>
 
-    <h2>信息收集与使用</h2>
-    
-    <h3>我们收集的信息</h3>
-    <p>本扩展仅在您主动使用时处理以下信息：</p>
+    <h2>二、我们处理的数据</h2>
+    <p>本扩展<strong>仅在您主动触发识别时</strong>处理以下数据，且不会收集任何与识别无关的个人信息（如姓名、账号、设备标识符、位置、浏览历史等）：</p>
     <ul>
-        <li>您上传的二维码图片</li>
-        <li>您剪贴板中的图片数据</li>
-        <li>您框选的网页截图区域</li>
+        <li><strong>您主动上传的二维码图片</strong>（通过"上传本地图片"选择）；</li>
+        <li><strong>您剪贴板中的图片</strong>（通过"粘贴自剪贴板"读取）；</li>
+        <li><strong>您在网页上框选的截图区域</strong>（通过"框选网页区域"截取）；</li>
+        <li><strong>网页图片地址（URL）</strong>（通过右键菜单识别时，用于获取该图片的资源）；</li>
+        <li><strong>识别结果文本</strong>（由上述图片解码得到的内容）。</li>
+    </ul>
+    <p>以上数据均为"用户提供的图片内容"。本扩展不读取、不存储您的浏览历史、Cookie、密码或其他网页表单数据。</p>
+
+    <h2>三、权限说明</h2>
+    <p>为提供上述识别功能，本扩展在 Microsoft Edge 中申请以下权限。每一项权限均严格限定于实现对应功能，我们不会将其用于声明用途之外的任何目的：</p>
+    <table class="perm-table">
+        <thead>
+            <tr><th>权限</th><th>用途说明</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>contextMenus</td><td>在网页图片上右键时显示"识别二维码"菜单及其识别模式子菜单，便于您快速发起识别。</td></tr>
+            <tr><td>activeTab</td><td>当您使用"框选网页区域"功能时，临时获取当前活动标签页的访问能力，用于截取您所选中的二维码区域。仅在您主动框选时生效，不会持续访问或监听页面。</td></tr>
+            <tr><td>scripting</td><td>配合 activeTab，在您框选时于当前活动标签页中注入必要的脚本以捕获选区坐标并完成截图，是框选功能的技术前提。</td></tr>
+            <tr><td>clipboardWrite</td><td>将识别结果复制到系统剪贴板，便于您粘贴使用。</td></tr>
+            <tr><td>clipboardRead</td><td>读取剪贴板中的图片，以支持"粘贴自剪贴板"识别。仅在您点击该按钮时读取，不会在后台监视剪贴板。</td></tr>
+            <tr><td>offscreen</td><td>创建无界面的离屏文档（Offscreen Document），在 DOM / Canvas 环境中裁剪图片并调用内置 zxing-wasm 引擎进行<strong>本地离线解码</strong>。所有解码均在您本机完成。</td></tr>
+            <tr><td>storage</td><td>使用浏览器本地存储（chrome.storage.local）临时保存识别状态与结果，便于弹窗展示与取消识别。数据仅存于本地，5 分钟后自动清除。</td></tr>
+            <tr><td>host_permissions（&lt;all_urls&gt;）</td><td>为支持对任意网页上的图片进行右键识别与框选，需要访问相应页面的图片资源（读取图片 URL 并获取其数据用于解码）。仅在您发起识别时访问目标页面资源，不用于其他用途。</td></tr>
+        </tbody>
+    </table>
+
+    <h2>四、数据的使用方式</h2>
+    <p>我们处理上述数据的<strong>唯一目的</strong>是识别二维码中的文本内容，绝不用于其他用途。根据您所选的识别模式，解码过程分为以下两种方式：</p>
+    <ul>
+        <li><strong>本地识别（离线）：</strong>默认采用的方式。图片在本机通过内置的 zxing-wasm 引擎完成识别，全过程无需联网，图片内容不会离开您的设备。</li>
+        <li><strong>在线识别（联网）：</strong>当您主动选择"在线识别"模式，或"自动"模式下本地解码失败时，图片会被发送至草料二维码 API 完成识别。在线识别仅传输待识别的图片本身，不含任何其他信息（具体见第五节"第三方数据共享"）。</li>
+    </ul>
+    <p>无论采用哪种解码方式，识别所得的文本结果均仅在本扩展弹窗中向您展示，并临时保存在浏览器本地存储中；我们<strong>不会</strong>将这些图片或识别结果用于任何分析、用户画像、广告投放或其他商业化用途。</p>
+
+    <h2>五、第三方数据共享</h2>
+    <p>本扩展<strong>不会出售、出租、交易或以其他方式转让您的数据</strong>。除下述唯一必要的第三方服务外，我们不向任何第三方共享数据：</p>
+    <div class="note">
+        <p><strong>唯一第三方：草料二维码 API（https://api.2dcode.biz/v1/read-qr-code）</strong></p>
+        <p>当本地离线解码不可用或您主动选择联网时，图片会被发送至草料二维码 API 以完成识别。具体触发情形如下：</p>
+        <ul>
+            <li><strong>自动模式（默认）：</strong>仅当本地解码<strong>失败</strong>时，作为兜底方案将图片发送至草料二维码 API；若本地识别成功，图片不上传。</li>
+            <li><strong>在线识别模式：</strong>您主动选择始终使用联网识别，图片会持续发送至草料二维码 API。</li>
+            <li><strong>本地识别模式：</strong>图片<strong>绝不会</strong>上传至任何服务器，完全离线。</li>
+        </ul>
+        <p>发送至草料二维码 API 的内容仅限于待识别的图片本身，不含任何其他个人信息。关于草料方如何处理该数据，请参见其<a href="https://cli.im/open-api/qrcode-api/read-qr-code.html" target="_blank" rel="noopener">解码 API 说明</a>。</p>
+    </div>
+
+    <h2>六、数据存储与保留</h2>
+    <ul>
+        <li>识别状态与结果使用浏览器本地存储（chrome.storage.local）保存，<strong>不会上传到我们的服务器</strong>；</li>
+        <li>本地存储的保留期限为 <strong>5 分钟</strong>，超时后自动清除；</li>
+        <li>您可随时点击弹窗中的"返回"按钮手动清除当前识别结果；</li>
+        <li>待识别的图片数据在解码完成后即被释放，<strong>不会在本地持久化保存</strong>。</li>
     </ul>
 
-    <h3>信息的使用</h3>
-    <p>上述信息仅用于识别二维码中的文本内容，识别完成后：</p>
+    <h2>七、数据安全</h2>
     <ul>
-        <li>图片数据不会在本地持久保存</li>
-        <li>识别结果仅显示在扩展弹窗中</li>
+        <li>本扩展不涉及用户账号体系，不设置 Cookie，不进行任何行为追踪或埋点统计；</li>
+        <li>本地解码全程在您设备的离屏文档中完成，图片不出本机；</li>
+        <li>仅在与草料二维码 API 通信时采用必要的网络传输，且传输内容仅限于待识别图片。</li>
     </ul>
 
-    <h2>本地解码与第三方服务</h2>
-    <p>本扩展<strong>优先在本地离线解码</strong>二维码：内置 zxing-wasm 引擎在你的设备上完成识别，图片不会离开本机。</p>
-    <p>仅在以下情况，图片才会被发送至第三方服务器：</p>
+    <h2>八、您的权利与控制</h2>
     <ul>
-        <li><strong>自动模式</strong>（默认）：本地解码失败时，作为兜底回退，图片会发送至草料二维码 API。</li>
-        <li><strong>仅在线模式</strong>：你主动选择始终使用草料二维码 API。</li>
-    </ul>
-    <p>若你选择<strong>仅本地模式</strong>，图片<strong>绝不会</strong>上传到任何服务器。</p>
-    <p>草料二维码API地址：<a href="https://api.2dcode.biz/v1/read-qr-code">https://api.2dcode.biz/v1/read-qr-code</a>。请参阅<a href="https://cli.im/open-api/qrcode-api/read-qr-code.html">草料二维码解码API</a>了解其数据处理方式。</p>
-
-    <h2>数据存储</h2>
-    <ul>
-        <li>识别结果使用Chrome扩展本地存储API（chrome.storage.local）保存</li>
-        <li>保存期限为5分钟，超时后自动清除</li>
-        <li>用户可以点击"返回"按钮手动清除历史结果</li>
+        <li>您可以随时在弹窗中<strong>取消正在进行的识别</strong>；</li>
+        <li>您可以点击"返回"按钮<strong>清除历史识别结果</strong>；</li>
+        <li>您可以自主决定是否打开识别出的链接；</li>
+        <li>您可以通过切换到"本地识别模式"确保图片<strong>绝不</strong>离开本机；</li>
+        <li>您有权就本隐私策略及数据处理方式向我们提出询问或异议。</li>
     </ul>
 
-    <h2>数据共享</h2>
-    <p>我们不会将您的信息出售、交易或以其他方式转让给第三方，但为提供二维码识别功能而必需的API服务除外。</p>
+    <h2>九、策略更新</h2>
+    <p>我们可能会不时更新本隐私策略。如发生涉及数据收集或使用方式的重大变更，我们将在扩展更新说明中予以提示。建议您定期查阅本页面以了解最新内容。</p>
 
-    <h2>您的权利</h2>
-    <ul>
-        <li>您可以随时取消正在进行的识别</li>
-        <li>您可以点击"返回"按钮清除历史识别结果</li>
-        <li>您可以选择是否打开识别出的链接</li>
-    </ul>
-
-    <h2>策略更新</h2>
-    <p>我们可能会不时更新本隐私策略。如有重大变更，我们将通过扩展更新通知您。</p>
-
-    <h2>联系方式</h2>
-    <p>如有任何问题，请通过以下方式联系我们：</p>
+    <h2>十、联系方式</h2>
+    <p>如您对本隐私策略或我们的数据处理实践有任何疑问、意见或投诉，请通过以下方式联系我们：</p>
     <ul>
         <li>邮箱：<a href="mailto:chen2205104404@gmail.com">chen2205104404@gmail.com</a></li>
     </ul>
 
     <div class="footer">
-        © 2026 QRcode Scaner（二维码识别器） - 保留所有权利
+        © 2026 QRcode Scaner（二维码识别器）　保留所有权利
     </div>
 </body>
 </html>

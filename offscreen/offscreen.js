@@ -1,6 +1,7 @@
 // offscreen document 消息路由（ESM）
 // 负责：1) 裁剪图片（DOM 环境） 2) 本地离线解码（zxing-wasm + Canvas 预处理）
-import { decodeOffline, dataURLToBlob } from './qr-decoder.js';
+import { decodeOffline } from './qr-decoder.js';
+import { dataURLToBlob } from '../shared/utils.js';
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // 本地离线解码

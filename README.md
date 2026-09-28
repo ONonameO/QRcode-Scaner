@@ -1,4 +1,4 @@
-## 📝简介
+## 📝 简介
 
 QRcode Scaner（二维码识别器）是一款功能全面的二维码解析工具，支持识别市面上几乎所有类型的二维码，包括百度网盘、夸克网盘等国内网盘的二维码。
 
@@ -28,7 +28,7 @@ QRcode Scaner（二维码识别器）是一款功能全面的二维码解析工�
 
 #### 方式一：
 
-- 前往 [Edge扩展商店](https://microsoftedge.microsoft.com/addons/detail/qrcode-scaner%EF%BC%88%E4%BA%8C%E7%BB%B4%E7%A0%81%E8%AF%86%E5%88%AB%E5%99%A8%EF%BC%89/pecmkcihcmeohnhafcfcccnfiggpajca) 进行下载安装
+- 前往 [Edge扩展商店](https://microsoftedge.microsoft.com/addons/detail/pecmkcihcmeohnhafcfcccnfiggpajca) 进行下载安装
 
 #### 方式二：
 1. 前往 [Releases](https://github.com/ONonameO/QRcode-Scaner/releases) 页面下载扩展并解压

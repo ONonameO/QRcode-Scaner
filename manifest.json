@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "QRcode Scaner（二维码识别器）",
   "version": "2.0.0",
-  "description": "QRcode Scaner（二维码识别器）是一款功能全面的二维码解析工具，支持识别市面上几乎所有类型的二维码，包括百度网盘、夸克网盘等国内网盘的二维码。",
+  "name": "__MSG_extensionName__",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "zh_CN",
   "permissions": [
     "contextMenus",
     "activeTab",
